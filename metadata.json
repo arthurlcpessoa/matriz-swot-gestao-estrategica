@@ -1,0 +1,6 @@
+{
+  "name": "Análise de SWOT e planos de ação",
+  "description": "Upload de planilha SWOT para geração automática de análise de riscos, cruzamento de fatores, priorização de criticidade e planos de ação no formato 5W2H com suporte a IA.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
