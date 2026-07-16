@@ -154,20 +154,34 @@ export function filterPlansToOneToOne(
   return finalPlans;
 }
 
-export default function App() {
-  // --- Estados do Sistema ---
-  const [activeTab, setActiveTab] = useState<"swot" | "analysis" | "plans" | "dashboard" | "omi" | "report">("swot");
-  const [swotViewMode, setSwotViewMode] = useState<"quadrants" | "table">("quadrants");
+ type UserRole = "admin" | "viewer" | null;
 
-  // Controle de segurança (Bloqueio de Edição) - Habilitado por padrão conforme solicitado
-  const [isEditingLocked, setIsEditingLocked] = useState<boolean>(true);
-  const [showPasswordModal, setShowPasswordModal] = useState<boolean>(false);
-  const [passwordInput, setPasswordInput] = useState<string>("");
-  const [passwordError, setPasswordError] = useState<string | null>(null);
-  const [currentTemplateName, setCurrentTemplateName] = useState<string>(() => {
-    const saved = localStorage.getItem("swot_template_name");
-    return saved || "Matriz Construtora ACLF";
-  });
+export default function App() {
+
+  const [userRole, setUserRole] = useState<UserRole>(null);
+  const [isChoosingAdmin, setIsChoosingAdmin] = useState(false);
+
+  const isAdmin = userRole === "admin";
+
+  const [activeTab, setActiveTab] = useState<
+  "swot" | "analysis" | "plans" | "dashboard" | "omi" | "report"
+>("swot");
+
+const [swotViewMode, setSwotViewMode] = useState<
+  "quadrants" | "table"
+>("quadrants");
+
+
+// Controle antigo de bloqueio de edição
+const [isEditingLocked, setIsEditingLocked] = useState<boolean>(true);
+const [showPasswordModal, setShowPasswordModal] = useState<boolean>(false);
+const [passwordInput, setPasswordInput] = useState<string>("");
+const [passwordError, setPasswordError] = useState<string | null>(null);
+
+const [currentTemplateName, setCurrentTemplateName] = useState<string>(() => {
+  const saved = localStorage.getItem("swot_template_name");
+  return saved || "Matriz Construtora ACLF";
+});
 
   const [isAnalysisStale, setIsAnalysisStaleState] = useState<boolean>(() => {
     const saved = localStorage.getItem("swot_analysis_stale");
@@ -791,17 +805,42 @@ export default function App() {
     setIsAnalysisStale(false);
   };
 
-  const handleUnlockEditing = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (passwordInput === "Mudar@123") {
-      setIsEditingLocked(false);
-      setShowPasswordModal(false);
-      setPasswordInput("");
-      setPasswordError(null);
-    } else {
-      setPasswordError("Senha incorreta! Por favor, tente novamente.");
+
+  const handleUnlockEditing = async (e: React.FormEvent) => {
+  e.preventDefault();
+  setPasswordError(null);
+
+  try {
+    const response = await fetch("/api/auth/admin", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        password: passwordInput
+      })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || !data.success) {
+      setPasswordError(
+        data.error || "Senha incorreta! Por favor, tente novamente."
+      );
+      return;
     }
-  };
+
+    setIsEditingLocked(false);
+    setShowPasswordModal(false);
+    setPasswordInput("");
+    setPasswordError(null);
+  } catch (error) {
+    console.error("Erro ao autenticar administrador:", error);
+    setPasswordError(
+      "Não foi possível validar a senha. Verifique se o servidor está rodando."
+    );
+  }
+}; 
 
   const handleLockEditing = () => {
     setIsEditingLocked(true);
