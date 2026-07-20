@@ -810,6 +810,7 @@ const [currentTemplateName, setCurrentTemplateName] = useState<string>(() => {
   e.preventDefault();
   setPasswordError(null);
 
+
   try {
     const response = await fetch("/api/auth/admin", {
       method: "POST",
@@ -830,10 +831,12 @@ const [currentTemplateName, setCurrentTemplateName] = useState<string>(() => {
       return;
     }
 
-    setIsEditingLocked(false);
-    setShowPasswordModal(false);
-    setPasswordInput("");
-    setPasswordError(null);
+    setUserRole("admin");
+setIsEditingLocked(false);
+setShowPasswordModal(false);
+setIsChoosingAdmin(false);
+setPasswordInput("");
+setPasswordError(null);
   } catch (error) {
     console.error("Erro ao autenticar administrador:", error);
     setPasswordError(
@@ -841,6 +844,15 @@ const [currentTemplateName, setCurrentTemplateName] = useState<string>(() => {
     );
   }
 }; 
+
+const handleEnterAsViewer = () => {
+  setUserRole("viewer");
+  setIsEditingLocked(true);
+  setIsChoosingAdmin(false);
+  setShowPasswordModal(false);
+  setPasswordInput("");
+  setPasswordError(null);
+};
 
   const handleLockEditing = () => {
     setIsEditingLocked(true);
@@ -1214,44 +1226,119 @@ const [currentTemplateName, setCurrentTemplateName] = useState<string>(() => {
     }
   };
 
+  if (userRole === null) {
+  return (
+    <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
+      <div className="w-full max-w-md bg-white border border-slate-200 rounded-3xl shadow-xl p-8 space-y-6">
+        <div className="text-center space-y-3">
+          <img
+            src={aclfLogoBase64}
+            alt="ACLF"
+            className="h-16 mx-auto object-contain"
+          />
+
+          <div>
+            <h1 className="text-xl font-black text-slate-800">
+              Planejamento Estratégico ACLF
+            </h1>
+
+            <p className="text-sm text-slate-500 mt-1">
+              Escolha o perfil de acesso para continuar.
+            </p>
+          </div>
+        </div>
+
+        {!isChoosingAdmin ? (
+          <div className="space-y-3">
+            <button
+              type="button"
+              onClick={handleEnterAsViewer}
+              className="w-full p-4 rounded-2xl border border-slate-200 bg-white hover:bg-slate-50 text-left transition-all"
+            >
+              <span className="block font-extrabold text-slate-800">
+                Entrar como Visualizador
+              </span>
+
+              <span className="block text-xs text-slate-500 mt-1">
+                Consulta e atualização dos campos permitidos.
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setIsChoosingAdmin(true);
+                setPasswordInput("");
+                setPasswordError(null);
+              }}
+              className="w-full p-4 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white text-left transition-all"
+            >
+              <span className="block font-extrabold">
+                Entrar como Administrador
+              </span>
+
+              <span className="block text-xs text-slate-300 mt-1">
+                Acesso completo mediante senha.
+              </span>
+            </button>
+          </div>
+        ) : (
+          <form onSubmit={handleUnlockEditing} className="space-y-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1.5">
+                Senha de administrador
+              </label>
+
+              <input
+                type="password"
+                value={passwordInput}
+                onChange={(e) => {
+                  setPasswordInput(e.target.value);
+                  setPasswordError(null);
+                }}
+                placeholder="Digite a senha..."
+                autoFocus
+                required
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-slate-500"
+              />
+            </div>
+
+            {passwordError && (
+              <p className="text-xs font-bold text-rose-600">
+                {passwordError}
+              </p>
+            )}
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsChoosingAdmin(false);
+                  setPasswordInput("");
+                  setPasswordError(null);
+                }}
+                className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-sm"
+              >
+                Voltar
+              </button>
+
+              <button
+                type="submit"
+                className="flex-1 px-4 py-2.5 rounded-xl bg-slate-900 text-white font-bold text-sm"
+              >
+                Entrar
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+}
+
   return (
     <div id="app-root-container" className="min-h-screen bg-slate-50 text-slate-800 flex flex-col antialiased print:bg-white print:text-black">
       
-      {/* Top Security Banner */}
-      {isEditingLocked && (
-        <div 
-          id="security-lock-banner"
-          className="w-full py-2.5 px-6 flex items-center justify-between transition-all duration-300 print:hidden bg-amber-500 text-white font-medium"
-        >
-          <div className="max-w-7xl mx-auto w-full flex flex-col md:flex-row items-center justify-between gap-2.5 text-xs">
-            <div className="flex items-center gap-2">
-              <span className="flex h-2 w-2 relative shrink-0">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 bg-amber-200"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-100"></span>
-              </span>
-              <span className="text-center md:text-left leading-relaxed">
-                <strong>🔒 Modo de Segurança Ativo:</strong>{" "}
-                A edição de SWOT, riscos, oportunidades e planos está bloqueada. Use a senha para habilitar.
-              </span>
-            </div>
-
-            <div>
-              <button
-                id="enable-editing-banner-btn"
-                onClick={() => {
-                  setPasswordInput("");
-                  setPasswordError(null);
-                  setShowPasswordModal(true);
-                }}
-                type="button"
-                className="px-3.5 py-1.5 bg-white text-amber-700 hover:bg-amber-55 rounded-lg font-black transition-all shadow-sm cursor-pointer text-[10px] uppercase tracking-wide leading-none"
-              >
-                Habilitar Edição
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
       
       {/* Top Professional Header Bar */}
       <header id="enterprise-header" className="bg-white border-b border-slate-200/90 py-5 px-6 sticky top-0 z-40 shadow-2xs print:relative print:border-none print:shadow-none">
@@ -1278,6 +1365,34 @@ const [currentTemplateName, setCurrentTemplateName] = useState<string>(() => {
 
           {/* Core Controls Header (Generatos & Exporters) */}
           <div className="flex flex-wrap items-center gap-3.5 print:hidden">
+          
+          <div className="flex items-center gap-2 text-[11px] bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200 font-bold text-slate-700">
+  <span
+    className={
+      isAdmin
+        ? "w-2 h-2 rounded-full bg-indigo-600"
+        : "w-2 h-2 rounded-full bg-slate-400"
+    }
+  />
+  <span>
+    Perfil: {isAdmin ? "Administrador" : "Visualizador"}
+  </span>
+</div>
+
+<button
+  type="button"
+  onClick={() => {
+    setUserRole(null);
+    setIsEditingLocked(true);
+    setIsChoosingAdmin(false);
+    setPasswordInput("");
+    setPasswordError(null);
+  }}
+  className="text-[11px] px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 font-bold hover:bg-slate-50 transition-all cursor-pointer"
+>
+  Trocar perfil
+</button>
+
             {/* Status indicators */}
             <div className="hidden md:flex items-center gap-2 text-[11px] bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200 font-medium text-slate-550">
               <span className={`w-2 h-2 rounded-full inline-block ${backendStatus.aiEnabled ? 'bg-indigo-600' : 'bg-amber-500'}`}></span>
@@ -1696,6 +1811,7 @@ const [currentTemplateName, setCurrentTemplateName] = useState<string>(() => {
                   onAddPlan={handleAddActionPlan}
                   onRebuildPlans={handleRebuildOneToOneActionPlans}
                   isEditingLocked={isEditingLocked}
+                  canEditDeadline={isAdmin}
                 />
               )}
             </motion.div>
@@ -1741,7 +1857,9 @@ const [currentTemplateName, setCurrentTemplateName] = useState<string>(() => {
               animate={{ opacity: 1, y: 0 }}
               className="space-y-6 animate-fade-in"
             >
-              <OmiDashboard />
+              <OmiDashboard 
+              canEditDeadline={isAdmin}
+               />  
             </motion.div>
           )}
 

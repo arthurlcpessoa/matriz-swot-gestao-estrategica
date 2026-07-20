@@ -448,13 +448,15 @@ interface OmiActionPlansTabProps {
   setActionPlans: React.Dispatch<React.SetStateAction<OmiActionPlan[]>>;
   isCreatingAction: boolean;
   setIsCreatingAction: (val: boolean) => void;
+  canEditDeadline: boolean;
 }
 
 export default function OmiActionPlansTab({
   actionPlans,
   setActionPlans,
   isCreatingAction,
-  setIsCreatingAction
+  setIsCreatingAction,
+  canEditDeadline
 }: OmiActionPlansTabProps) {
 
   useEffect(() => {
@@ -941,6 +943,7 @@ const handleSaveActionEdit = async (e: React.FormEvent) => {
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Prazo / Deadline</label>
                   <input
+                    disabled={!canEditDeadline}
                     type="text"
                     placeholder="Ex: 30/09/2026, Contínuo, Mensal..."
                     value={editingAction.deadline}

@@ -52,6 +52,7 @@ interface ActionPlansProps {
   onAddPlan: (newPlan: ActionPlanItem) => void;
   onRebuildPlans?: () => void;
   isEditingLocked?: boolean;
+  canEditDeadline: boolean;
 }
 
 export default function ActionPlans({ 
@@ -62,6 +63,7 @@ export default function ActionPlans({
   onDeletePlan, 
   onAddPlan,
   onRebuildPlans,
+  canEditDeadline,
   isEditingLocked = false
 }: ActionPlansProps) {
   const [searchTerm, setSearchTerm] = useState("");
@@ -467,16 +469,13 @@ export default function ActionPlans({
                           {/* Action buttons */}
                           <div className="flex items-center gap-1 shrink-0 ml-2">
                             <button
-                              onClick={() => !isEditingLocked && setEditingPlan(plan)}
-                              disabled={isEditingLocked}
-                              type="button"
-                              className={`p-1 px-1.5 text-slate-400 hover:text-indigo-650 hover:bg-slate-100 rounded-md transition-all cursor-pointer ${
-                                isEditingLocked ? "opacity-30 cursor-not-allowed" : ""
-                              }`}
-                              title={isEditingLocked ? "Edição bloqueada" : "Editar"}
-                            >
-                              <Edit className="w-3 h-3" />
-                            </button>
+  onClick={() => setEditingPlan(plan)}
+  type="button"
+  className="p-1 px-1.5 text-slate-400 hover:text-indigo-650 hover:bg-slate-100 rounded-md transition-all cursor-pointer"
+  title="Editar"
+>
+  <Edit className="w-3 h-3" />
+</button>
                             
                             <button
                               onClick={() => {
@@ -728,6 +727,7 @@ export default function ActionPlans({
                   <label className="text-[10px] font-bold text-slate-450 uppercase tracking-wider block">When? (Mês Alvo & Prazo)</label>
                   <div className="flex gap-1.5">
                     <select
+                      disabled={!canEditDeadline}
                       value={(() => {
                         const idx = parseMonthFromWhen(editingPlan.when);
                         return idx !== null ? idx.toString() : "";
@@ -753,6 +753,7 @@ export default function ActionPlans({
                       ))}
                     </select>
                     <input
+                      disabled={!canEditDeadline}
                       type="text"
                       value={editingPlan.when}
                       onChange={(e) => setEditingPlan({ ...editingPlan, when: e.target.value })}
@@ -1006,6 +1007,7 @@ export default function ActionPlans({
                   <label className="text-[10px] font-bold text-slate-450 uppercase tracking-wider block">When? (Mês Alvo & Prazo)</label>
                   <div className="flex gap-1.5">
                     <select
+                      disabled={!canEditDeadline}
                       value={(() => {
                         const idx = parseMonthFromWhen(newPlanState.when);
                         return idx !== null ? idx.toString() : "";
@@ -1031,6 +1033,7 @@ export default function ActionPlans({
                       ))}
                     </select>
                     <input
+                      disabled={!canEditDeadline}
                       type="text"
                       value={newPlanState.when}
                       onChange={(e) => setNewPlanState({ ...newPlanState, when: e.target.value })}

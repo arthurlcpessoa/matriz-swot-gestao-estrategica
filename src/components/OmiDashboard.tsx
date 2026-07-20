@@ -388,7 +388,13 @@ const PRESET_OMI_ITEMS: OmiItem[] = [
   }
 ];
 
-export default function OmiDashboard() {
+interface OmiDashboardProps {
+  canEditDeadline: boolean;
+}
+
+export default function OmiDashboard({
+  canEditDeadline
+}: OmiDashboardProps) {
 
   console.log("OMI DASHBOARD RENDERIZOU");
 
@@ -604,7 +610,7 @@ useEffect(() => {
   const uniqueStakeholdersCount = Array.from(new Set(filteredItems.map(i => i.stakeholder))).length;
 
   const handleSaveEdit = (e: React.FormEvent) => {
-    e.preventDefault();
+    e.preventDefault(); 
     if (!editingItem) return;
 
     setItems(prev => prev.map(item => item.id === editingItem.id ? editingItem : item));
@@ -1049,7 +1055,8 @@ useEffect(() => {
           actionPlans={actionPlans} 
           setActionPlans={setActionPlans} 
           isCreatingAction={isCreatingAction} 
-          setIsCreatingAction={setIsCreatingAction} 
+          setIsCreatingAction={setIsCreatingAction}
+          canEditDeadline={canEditDeadline} 
         />
       )}
 
