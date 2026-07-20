@@ -572,6 +572,313 @@ app.post("/api/auth/admin", (req: Request, res: Response) => {
     role: "admin"
   });
 });
+
+interface ReminderActionPlan {
+  id: string;
+  title?: string;
+  action?: string;
+  description?: string;
+  responsible?: string;
+  responsibleEmail?: string;
+  deadline?: string;
+  status?: string;
+  completionDate?: string;
+}
+
+interface ReminderEmailPreview {
+  to: string;
+  responsible: string;
+  subject: string;
+  actionsCount: number;
+  actionIds: string[];
+  html: string;
+}
+
+function escapeHtml(value: unknown): string {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function parseDeadline(value?: string): Date | null {
+  if (!value || typeof value !== "string") {
+    return null;
+  }
+
+  const normalizedValue = value.trim();
+
+  // Formato brasileiro: DD/MM/AAAA
+  const brazilianDateMatch = normalizedValue.match(
+    /^(\d{2})\/(\d{2})\/(\d{4})$/
+  );
+
+  if (brazilianDateMatch) {
+    const [, day, month, year] = brazilianDateMatch;
+
+    const parsedDate = new Date(
+      Number(year),
+      Number(month) - 1,
+      Number(day)
+    );
+
+    parsedDate.setHours(0, 0, 0, 0);
+
+    return Number.isNaN(parsedDate.getTime()) ? null : parsedDate;
+  }
+
+  // Formato ISO: AAAA-MM-DD
+  const isoDateMatch = normalizedValue.match(
+    /^(\d{4})-(\d{2})-(\d{2})$/
+  );
+
+  if (isoDateMatch) {
+    const [, year, month, day] = isoDateMatch;
+
+    const parsedDate = new Date(
+      Number(year),
+      Number(month) - 1,
+      Number(day)
+    );
+
+    parsedDate.setHours(0, 0, 0, 0);
+
+    return Number.isNaN(parsedDate.getTime()) ? null : parsedDate;
+  }
+
+  return null;
+}
+
+function isCompletedAction(actionPlan: ReminderActionPlan): boolean {
+  const normalizedStatus = String(actionPlan.status ?? "")
+    .trim()
+    .toLowerCase();
+
+  const completedStatuses = [
+    "concluído",
+    "concluída",
+    "concluido",
+    "concluida",
+    "finalizado",
+    "finalizada",
+    "completed",
+    "done"
+  ];
+
+  return (
+    completedStatuses.includes(normalizedStatus) ||
+    Boolean(actionPlan.completionDate?.trim())
+  );
+}
+
+function buildReminderEmailHtml(
+  responsible: string,
+  actions: ReminderActionPlan[]
+): string {
+  const actionRows = actions
+    .map((actionPlan) => {
+      const actionTitle =
+        actionPlan.title ||
+        actionPlan.action ||
+        actionPlan.description ||
+        "Ação sem título";
+
+      return `
+        <tr>
+          <td style="padding: 10px; border: 1px solid #d1d5db;">
+            ${escapeHtml(actionTitle)}
+          </td>
+
+          <td style="padding: 10px; border: 1px solid #d1d5db;">
+            ${escapeHtml(actionPlan.deadline || "Prazo não informado")}
+          </td>
+
+          <td style="padding: 10px; border: 1px solid #d1d5db;">
+            ${escapeHtml(actionPlan.status || "Pendente")}
+          </td>
+        </tr>
+      `;
+    })
+    .join("");
+
+  return `
+    <!DOCTYPE html>
+    <html lang="pt-BR">
+      <head>
+        <meta charset="UTF-8" />
+      </head>
+
+      <body style="font-family: Arial, sans-serif; color: #1f2937;">
+        <p>Olá, ${escapeHtml(responsible)}.</p>
+
+        <p>
+          Identificamos ações do planejamento estratégico com prazo vencido
+          que ainda não foram concluídas.
+        </p>
+
+        <table
+          style="
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            margin-bottom: 20px;
+          "
+        >
+          <thead>
+            <tr style="background-color: #f3f4f6;">
+              <th style="padding: 10px; border: 1px solid #d1d5db;">
+                Ação
+              </th>
+
+              <th style="padding: 10px; border: 1px solid #d1d5db;">
+                Prazo
+              </th>
+
+              <th style="padding: 10px; border: 1px solid #d1d5db;">
+                Situação
+              </th>
+            </tr>
+          </thead>
+
+          <tbody>
+            ${actionRows}
+          </tbody>
+        </table>
+
+        <p>
+          Por favor, atualize o andamento dessas ações no sistema.
+        </p>
+
+        <p>
+          Atenciosamente,<br />
+          Gestão Estratégica ACLF
+        </p>
+      </body>
+    </html>
+  `;
+}
+
+// Endpoint de simulação e futuro envio de lembretes
+app.post(
+  "/api/emails/send-reminders",
+  (req: Request, res: Response) => {
+    try {
+      const { actionPlans } = req.body as {
+        actionPlans?: ReminderActionPlan[];
+      };
+
+      if (!Array.isArray(actionPlans)) {
+        return res.status(400).json({
+          success: false,
+          error: "A lista de planos de ação não foi enviada corretamente."
+        });
+      }
+
+      const senderEmail = process.env.OUTLOOK_SENDER_EMAIL;
+      const simulationMode =
+        process.env.EMAIL_SIMULATION_MODE !== "false";
+
+      if (!senderEmail) {
+        return res.status(500).json({
+          success: false,
+          error: "OUTLOOK_SENDER_EMAIL não está configurado no servidor."
+        });
+      }
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const overdueActions = actionPlans.filter((actionPlan) => {
+        if (isCompletedAction(actionPlan)) {
+          return false;
+        }
+
+        if (!actionPlan.responsibleEmail?.trim()) {
+          return false;
+        }
+
+        const deadline = parseDeadline(actionPlan.deadline);
+
+        if (!deadline) {
+          return false;
+        }
+
+        return deadline.getTime() < today.getTime();
+      });
+
+      const actionsByEmail = new Map<string, ReminderActionPlan[]>();
+
+      overdueActions.forEach((actionPlan) => {
+  const emails = actionPlan.responsibleEmail!
+    .split(/[;,]/)
+    .map((email) => email.trim().toLowerCase())
+    .filter((email) => email !== "");
+
+  emails.forEach((email) => {
+    const existingActions = actionsByEmail.get(email) ?? [];
+
+    existingActions.push(actionPlan);
+    actionsByEmail.set(email, existingActions);
+  });
+});
+
+      const emailPreviews: ReminderEmailPreview[] = [];
+
+      actionsByEmail.forEach((actions, email) => {
+        const responsible =
+          actions[0]?.responsible?.trim() || "Responsável";
+
+        emailPreviews.push({
+          to: email,
+          responsible,
+          subject: "Lembrete de ações estratégicas com prazo vencido",
+          actionsCount: actions.length,
+          actionIds: actions.map((action) => action.id),
+          html: buildReminderEmailHtml(responsible, actions)
+        });
+      });
+
+      console.log(
+        `[EMAIL REMINDERS] ${emailPreviews.length} e-mail(s) preparado(s) para ${overdueActions.length} ação(ões) atrasada(s).`
+      );
+
+      if (simulationMode) {
+        console.log(
+          "[EMAIL REMINDERS] Modo de simulação ativo. Nenhum e-mail foi enviado."
+        );
+
+        return res.status(200).json({
+          success: true,
+          simulationMode: true,
+          sender: senderEmail,
+          overdueActionsCount: overdueActions.length,
+          emailsCount: emailPreviews.length,
+          emails: emailPreviews
+        });
+      }
+
+      return res.status(501).json({
+        success: false,
+        simulationMode: false,
+        error:
+          "O envio real ainda não foi configurado. Ative EMAIL_SIMULATION_MODE=true."
+      });
+    } catch (error: any) {
+      console.error(
+        "Erro ao preparar os lembretes por e-mail:",
+        error
+      );
+
+      return res.status(500).json({
+        success: false,
+        error: "Erro interno ao preparar os lembretes.",
+        details: error.message
+      });
+    }
+  }
+);
   
 // Endpoint de análise automática da SWOT usando IA ou Algoritmo Local
 app.post("/api/analyze-swot", async (req, res): Promise<any> => {

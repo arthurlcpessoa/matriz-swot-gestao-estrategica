@@ -491,6 +491,21 @@ export default function OmiActionPlansTab({
   // Edit State
   const [editingAction, setEditingAction] = useState<OmiActionPlan | null>(null);
 
+
+  const [isSendingReminders, setIsSendingReminders] = useState(false);
+const [reminderResult, setReminderResult] = useState<{
+  sender: string;
+  overdueActionsCount: number;
+  emailsCount: number;
+  emails: Array<{
+    to: string;
+    responsible: string;
+    subject: string;
+    actionsCount: number;
+    html: string; 
+  }>;
+} | null>(null);
+
   // Create Action Plan Form Fields
   const [newActionCommittee, setNewActionCommittee] = useState("");
   const [newActionText, setNewActionText] = useState("");
@@ -596,6 +611,74 @@ const handleSaveActionEdit = async (e: React.FormEvent) => {
     }
   };
 
+  
+  const handleSendReminders = async () => {
+  const delayedActions = actionPlans.filter(
+    action =>
+      action.status === "Atrasado" &&
+      action.completionDate.trim() === "" &&
+      action.email.trim() !== ""
+  );
+
+  if (delayedActions.length === 0) {
+    alert("Nenhuma ação atrasada com e-mail cadastrado foi encontrada.");
+    return;
+  }
+
+  const confirmed = window.confirm(
+    `Foram encontradas ${delayedActions.length} ação(ões) atrasada(s).\n\nDeseja gerar a simulação dos lembretes por e-mail?`
+  );
+
+  if (!confirmed) {
+    return;
+  }
+
+  try {
+    setIsSendingReminders(true);
+    setReminderResult(null);
+
+    const response = await fetch("/api/emails/send-reminders", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        actionPlans: actionPlans.map(action => ({
+          id: action.id,
+          title: action.action,
+          action: action.action,
+          description: action.action,
+          responsible: action.responsible,
+          responsibleEmail: action.email,
+          deadline: action.deadline,
+          status: action.status,
+          completionDate: action.completionDate
+        }))
+      })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        data.error || "Não foi possível preparar os lembretes."
+      );
+    }
+
+    setReminderResult(data);
+  } catch (error) {
+    console.error("Erro ao simular lembretes:", error);
+
+    alert(
+      error instanceof Error
+        ? error.message
+        : "Ocorreu um erro ao simular os lembretes."
+    );
+  } finally {
+    setIsSendingReminders(false);
+  }
+};
+
   const exportActionsToCSV = () => {
     const headers = ["ID", "Painel/Comite", "Acao", "Responsavel", "E-mail", "Prazo", "Data de Conclusao", "Status"];
     const rows = filteredActionPlans.map(act => [
@@ -625,6 +708,23 @@ const handleSaveActionEdit = async (e: React.FormEvent) => {
     <div className="space-y-6 animate-in fade-in duration-200">
       {/* ACTION TOOLBAR */}
       <div className="flex justify-end items-center gap-2 print:hidden -mt-2">
+
+        {canEditDeadline && (
+  <button
+    type="button"
+    onClick={handleSendReminders}
+    disabled={isSendingReminders}
+    className="p-1.5 px-3 border border-indigo-200 text-indigo-700 bg-indigo-50 font-bold text-xs rounded-xl flex items-center gap-1.5 hover:bg-indigo-100 transition-all cursor-pointer shadow-3xs disabled:opacity-50 disabled:cursor-not-allowed"
+    title="Gerar simulação dos lembretes das ações atrasadas"
+  >
+    <Mail className="w-3.5 h-3.5" />
+
+    {isSendingReminders
+      ? "Preparando..."
+      : "Simular Lembretes"}
+  </button>
+)}
+
         <button
           onClick={exportActionsToCSV}
           className="p-1.5 px-3 border border-slate-200 text-slate-600 bg-white font-bold text-xs rounded-xl flex items-center gap-1.5 hover:bg-slate-50 transition-all cursor-pointer shadow-3xs"
@@ -640,6 +740,71 @@ const handleSaveActionEdit = async (e: React.FormEvent) => {
           Reconfigurar Ações OMI
         </button>
       </div>
+
+      {reminderResult && (
+  <div className="bg-indigo-50 border border-indigo-200 rounded-2xl p-4 print:hidden">
+    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+      <div>
+        <div className="flex items-center gap-2">
+          <Mail className="w-4 h-4 text-indigo-700" />
+
+          <h3 className="text-sm font-extrabold text-indigo-900">
+            Simulação de lembretes concluída
+          </h3>
+        </div>
+
+        <p className="text-xs text-indigo-700 mt-1">
+          {reminderResult.overdueActionsCount} ação(ões) atrasada(s) geraram{" "}
+          {reminderResult.emailsCount} e-mail(s).
+        </p>
+
+        <p className="text-[10px] text-indigo-600 mt-1">
+          Remetente configurado: {reminderResult.sender}
+        </p>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => setReminderResult(null)}
+        className="self-end sm:self-start p-1.5 text-indigo-500 hover:text-indigo-800 hover:bg-indigo-100 rounded-lg cursor-pointer"
+        title="Fechar resultado"
+      >
+        <X className="w-4 h-4" />
+      </button>
+    </div>
+
+    <div className="mt-4 space-y-2">
+      {reminderResult.emails.map((emailPreview, index) => (
+        <div
+          key={`${emailPreview.to}-${index}`}
+          className="bg-white border border-indigo-100 rounded-xl p-3"
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+            <span className="text-xs font-bold text-slate-800 break-all">
+              {emailPreview.to}
+            </span>
+
+            <span className="text-[10px] font-bold text-indigo-700">
+              {emailPreview.actionsCount} ação(ões)
+            </span>
+          </div>
+
+          <p className="text-[10px] text-slate-500 mt-1">
+            Responsável: {emailPreview.responsible}
+          </p>
+
+          <p className="text-[10px] text-slate-500">
+            Assunto: {emailPreview.subject}
+          </p>
+        </div>
+      ))}
+    </div>
+
+    <p className="text-[10px] font-semibold text-indigo-700 mt-3">
+      Modo de simulação ativo: nenhum e-mail foi enviado.
+    </p>
+  </div>
+)}
 
       {/* STATS OVERVIEW FOR ACTIONS */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
