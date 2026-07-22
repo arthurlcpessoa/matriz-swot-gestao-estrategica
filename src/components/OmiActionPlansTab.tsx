@@ -704,7 +704,7 @@ const handleSaveActionEdit = async (e: React.FormEvent) => {
     document.body.removeChild(link);
   };
 
-  return (
+    return (
     <div className="space-y-6 animate-in fade-in duration-200">
       {/* ACTION TOOLBAR */}
       <div className="flex justify-end items-center gap-2 print:hidden -mt-2">
@@ -774,7 +774,7 @@ const handleSaveActionEdit = async (e: React.FormEvent) => {
     </div>
 
     <div className="mt-4 space-y-2">
-      {reminderResult.emails.map((emailPreview, index) => (
+      {(reminderResult.emails ?? []).map((emailPreview, index) => (
         <div
           key={`${emailPreview.to}-${index}`}
           className="bg-white border border-indigo-100 rounded-xl p-3"

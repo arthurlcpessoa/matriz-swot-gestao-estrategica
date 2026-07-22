@@ -3,11 +3,47 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
+import nodemailer from "nodemailer";
 
 dotenv.config();
 
 const app = express();
 const PORT = 3000;
+
+const getSmtpTransporter = () => {
+  const smtpHost = process.env.SMTP_HOST;
+  const smtpPort = Number(process.env.SMTP_PORT);
+  const smtpSecure = process.env.SMTP_SECURE === "true";
+  const smtpUser = process.env.SMTP_USER;
+  const smtpPassword = process.env.SMTP_PASSWORD;
+  const smtpTlsServername =
+    process.env.SMTP_TLS_SERVERNAME || "skymail.net.br";
+
+  if (
+    !smtpHost ||
+    !Number.isFinite(smtpPort) ||
+    !smtpUser ||
+    !smtpPassword
+  ) {
+    throw new Error(
+      "As variáveis SMTP_HOST, SMTP_PORT, SMTP_USER e SMTP_PASSWORD devem estar configuradas."
+    );
+  }
+
+  return nodemailer.createTransport({
+    host: smtpHost,
+    port: smtpPort,
+    secure: smtpSecure,
+    authMethod: "LOGIN",
+    auth: {
+      user: smtpUser,
+      pass: smtpPassword
+    },
+    tls: {
+      servername: smtpTlsServername
+    }
+  });
+};
 
 // Middleware para processamento de JSON com tamanho limite aumentado caso venham planilhas grandes
 app.use(express.json({ limit: '10mb' }));
@@ -760,10 +796,10 @@ function buildReminderEmailHtml(
   `;
 }
 
-// Endpoint de simulação e futuro envio de lembretes
+// Endpoint de simulação e envio real de lembretes
 app.post(
   "/api/emails/send-reminders",
-  (req: Request, res: Response) => {
+  async (req: Request, res: Response) => {
     try {
       const { actionPlans } = req.body as {
         actionPlans?: ReminderActionPlan[];
@@ -811,18 +847,18 @@ app.post(
       const actionsByEmail = new Map<string, ReminderActionPlan[]>();
 
       overdueActions.forEach((actionPlan) => {
-  const emails = actionPlan.responsibleEmail!
-    .split(/[;,]/)
-    .map((email) => email.trim().toLowerCase())
-    .filter((email) => email !== "");
+        const emails = actionPlan.responsibleEmail!
+          .split(/[;,]/)
+          .map((email) => email.trim().toLowerCase())
+          .filter((email) => email !== "");
 
-  emails.forEach((email) => {
-    const existingActions = actionsByEmail.get(email) ?? [];
+        emails.forEach((email) => {
+          const existingActions = actionsByEmail.get(email) ?? [];
 
-    existingActions.push(actionPlan);
-    actionsByEmail.set(email, existingActions);
-  });
-});
+          existingActions.push(actionPlan);
+          actionsByEmail.set(email, existingActions);
+        });
+      });
 
       const emailPreviews: ReminderEmailPreview[] = [];
 
@@ -833,7 +869,7 @@ app.post(
         emailPreviews.push({
           to: email,
           responsible,
-          subject: "Lembrete de ações estratégicas com prazo vencido",
+          subject: "OMI | Lembrete de ações com prazo vencido",
           actionsCount: actions.length,
           actionIds: actions.map((action) => action.id),
           html: buildReminderEmailHtml(responsible, actions)
@@ -859,21 +895,97 @@ app.post(
         });
       }
 
-      return res.status(501).json({
-        success: false,
+      if (emailPreviews.length === 0) {
+        return res.status(200).json({
+          success: true,
+          simulationMode: false,
+          sender: senderEmail,
+          overdueActionsCount: 0,
+          emailsCount: 0,
+          sentEmailsCount: 0,
+          message: "Nenhuma ação atrasada elegível para envio."
+        });
+      }
+
+      const transporter = getSmtpTransporter();
+
+      await transporter.verify();
+
+      const sendResults = [];
+
+      for (const emailPreview of emailPreviews) {
+        try {
+          const info = await transporter.sendMail({
+    from: senderEmail,
+    to: emailPreview.to,
+    subject: emailPreview.subject,
+    html: emailPreview.html
+});
+
+console.log({
+    messageId: info.messageId,
+    accepted: info.accepted,
+    rejected: info.rejected,
+    response: info.response
+});
+
+          sendResults.push({
+            to: emailPreview.to,
+            success: true,
+            messageId: info.messageId,
+            actionsCount: emailPreview.actionsCount,
+            actionIds: emailPreview.actionIds
+          });
+        } catch (sendError: any) {
+          console.error(
+            `[EMAIL REMINDERS] Falha ao enviar para ${emailPreview.to}:`,
+            sendError
+          );
+
+          sendResults.push({
+            to: emailPreview.to,
+            success: false,
+            error: sendError.message,
+            actionsCount: emailPreview.actionsCount,
+            actionIds: emailPreview.actionIds
+          });
+        }
+      }
+
+      transporter.close();
+
+      const successfulEmails = sendResults.filter(
+        (result) => result.success
+      );
+
+      const failedEmails = sendResults.filter(
+        (result) => !result.success
+      );
+
+      console.log(
+        `[EMAIL REMINDERS] ${successfulEmails.length} e-mail(s) enviado(s) e ${failedEmails.length} falha(s).`
+      );
+
+      return res.status(failedEmails.length > 0 ? 207 : 200).json({
+        success: failedEmails.length === 0,
         simulationMode: false,
-        error:
-          "O envio real ainda não foi configurado. Ative EMAIL_SIMULATION_MODE=true."
+        sender: senderEmail,
+        overdueActionsCount: overdueActions.length,
+        emailsCount: emailPreviews.length,
+        sentEmailsCount: successfulEmails.length,
+        failedEmailsCount: failedEmails.length,
+        emails: emailPreviews,  
+        results: sendResults
       });
     } catch (error: any) {
       console.error(
-        "Erro ao preparar os lembretes por e-mail:",
+        "Erro ao preparar ou enviar os lembretes por e-mail:",
         error
       );
 
       return res.status(500).json({
         success: false,
-        error: "Erro interno ao preparar os lembretes.",
+        error: "Erro interno ao preparar ou enviar os lembretes.",
         details: error.message
       });
     }
