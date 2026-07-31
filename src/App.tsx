@@ -566,7 +566,7 @@ const [currentTemplateName, setCurrentTemplateName] = useState<string>(() => {
         const CURRENT_DATA_VERSION = "aclf_real_data_v15";
         let versionDb = localStorage.getItem("aclf_data_version_db");
 
-        const needsDbReset = versionDb !== CURRENT_DATA_VERSION;
+        const needsDbReset = false; 
 
         if (needsDbReset) {
           console.log("[SUPABASE RESET] Nova versão detectada. Limpando e forçando reset limpo com 20/20 planos de ação...");

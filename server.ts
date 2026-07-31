@@ -826,27 +826,21 @@ app.post(
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
-      const overdueActions = actionPlans.filter((actionPlan) => {
-        if (isCompletedAction(actionPlan)) {
-          return false;
-        }
+      const pendingActions = actionPlans.filter((actionPlan) => {
+  if (isCompletedAction(actionPlan)) {
+    return false;
+  }
 
-        if (!actionPlan.responsibleEmail?.trim()) {
-          return false;
-        }
+  if (!actionPlan.responsibleEmail?.trim()) {
+    return false;
+  }
 
-        const deadline = parseDeadline(actionPlan.deadline);
-
-        if (!deadline) {
-          return false;
-        }
-
-        return deadline.getTime() < today.getTime();
-      });
+  return true;
+});
 
       const actionsByEmail = new Map<string, ReminderActionPlan[]>();
 
-      overdueActions.forEach((actionPlan) => {
+      pendingActions.forEach((actionPlan) => {
         const emails = actionPlan.responsibleEmail!
           .split(/[;,]/)
           .map((email) => email.trim().toLowerCase())
@@ -877,7 +871,7 @@ app.post(
       });
 
       console.log(
-        `[EMAIL REMINDERS] ${emailPreviews.length} e-mail(s) preparado(s) para ${overdueActions.length} ação(ões) atrasada(s).`
+        `[EMAIL REMINDERS] ${emailPreviews.length} e-mail(s) preparado(s) para ${pendingActions.length} ação(ões) atrasada(s).`
       );
 
       if (simulationMode) {
@@ -889,7 +883,7 @@ app.post(
           success: true,
           simulationMode: true,
           sender: senderEmail,
-          overdueActionsCount: overdueActions.length,
+          overdueActionsCount: pendingActions.length,
           emailsCount: emailPreviews.length,
           emails: emailPreviews
         });
@@ -918,6 +912,7 @@ app.post(
           const info = await transporter.sendMail({
     from: senderEmail,
     to: emailPreview.to,
+    cc: "gestaocorporativa@aclf.com.br",
     subject: emailPreview.subject,
     html: emailPreview.html
 });
@@ -970,7 +965,7 @@ console.log({
         success: failedEmails.length === 0,
         simulationMode: false,
         sender: senderEmail,
-        overdueActionsCount: overdueActions.length,
+        overdueActionsCount: pendingActions.length,
         emailsCount: emailPreviews.length,
         sentEmailsCount: successfulEmails.length,
         failedEmailsCount: failedEmails.length,

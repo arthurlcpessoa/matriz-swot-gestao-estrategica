@@ -613,20 +613,19 @@ const handleSaveActionEdit = async (e: React.FormEvent) => {
 
   
   const handleSendReminders = async () => {
-  const delayedActions = actionPlans.filter(
-    action =>
-      action.status === "Atrasado" &&
-      action.completionDate.trim() === "" &&
-      action.email.trim() !== ""
-  );
+  const pendingActions = actionPlans.filter(
+  action =>
+    action.completionDate.trim() === "" &&
+    action.email.trim() !== ""
+);
 
-  if (delayedActions.length === 0) {
-    alert("Nenhuma ação atrasada com e-mail cadastrado foi encontrada.");
+  if (pendingActions.length === 0) {
+    alert("Nenhuma ação pendente com e-mail cadastrado foi encontrada.");
     return;
   }
 
   const confirmed = window.confirm(
-    `Foram encontradas ${delayedActions.length} ação(ões) atrasada(s).\n\nDeseja gerar a simulação dos lembretes por e-mail?`
+    `Foram encontradas ${pendingActions.length} ação(ões) pendente(s).\n\nDeseja gerar a simulação dos lembretes por e-mail?`
   );
 
   if (!confirmed) {
