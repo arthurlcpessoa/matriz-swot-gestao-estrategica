@@ -658,7 +658,7 @@ const handleSaveActionEdit = async (e: React.FormEvent) => {
 
     const data = await response.json();
 
-    if (!response.ok) {
+    if (!response.ok) { 
       throw new Error(
         data.error || "Não foi possível preparar os lembretes."
       );

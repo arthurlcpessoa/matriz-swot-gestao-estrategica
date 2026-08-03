@@ -1663,10 +1663,21 @@ const handleEnterAsViewer = () => {
             >
               {/* View layout selectors */}
               <div className="flex justify-between items-center pb-5">
-                <div className="space-y-0.5">
-                  <h3 className="font-bold text-base text-slate-800">Visualização da Matriz SWOT</h3>
-                  <p className="text-xs text-slate-500">Exiba o mapeamento estratégico da empresa ou edite os fatores em tempo real.</p>
-                </div>
+  <div className="space-y-0.5">
+    <div className="flex items-center gap-2">
+      <h3 className="font-bold text-base text-slate-800">
+        Visualização da Matriz SWOT
+      </h3>
+
+      <span className="rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-[10px] font-bold text-indigo-700">
+        Versão 2026
+      </span>
+    </div>
+
+    <p className="text-xs text-slate-500">
+      Exiba o mapeamento estratégico da empresa ou edite os fatores em tempo real.
+    </p>
+  </div>
 
                 <div className="flex items-center border border-slate-200 rounded-xl bg-white p-1 shadow-3xs">
                   <button

@@ -761,58 +761,63 @@ useEffect(() => {
   };
 
   return (
-    <div className="space-y-6">
-      {/* HEADER SECTION */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-100 pb-5">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <span className="p-1 px-2.5 bg-indigo-600 text-white rounded-lg text-[9px] font-black uppercase tracking-wider">
-              {activeSubTab === "indicators" ? "Mapeamento Corporativo" : "Gestão 5W2H"}
-            </span>
-            <span className="text-slate-400 font-mono text-[10px]">Elaborador: Thamiris Eduarda • Aprovador: Fernando Fink</span>
-          </div>
-          <h2 className="text-xl font-black text-slate-800 tracking-tight flex items-center gap-2">
-            <FileSpreadsheet className="w-5.5 h-5.5 text-indigo-505" /> 
-            {activeSubTab === "indicators" 
-              ? "OMI — Objetivos, Metas e Indicadores" 
-              : "Planos de Ação OMI — Metodologia 5W2H"}
-          </h2>
-          <p className="text-slate-550 text-xs font-normal">
-            {activeSubTab === "indicators" 
-              ? "Cruzamento sistêmico de dimensões estratégicas, expectativas de partes interessadas, requisitos e preferência de controle de performance da ACLF."
-              : "Planos de ação estruturados sob a ótica 5W2H extraídos do planejamento estratégico oficial para mitigação e alcance das metas corporativas."}
-          </p>
+  <div className="space-y-6">
+    {/* HEADER SECTION */}
+    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-100 pb-5">
+      <div className="space-y-1">
+        <div className="flex items-center gap-2">
+          <span className="self-center p-1 px-2.5 bg-indigo-600 text-white rounded-lg text-[9px] font-black uppercase tracking-wider">
+            {activeSubTab === "indicators"
+              ? "Mapeamento Corporativo"
+              : "Gestão 5W2H"}
+          </span>
+
+          <span className="text-slate-400 font-mono text-[10px]">
+            Elaborador: Thamiris Eduarda • Aprovador: Fernando Fink
+          </span>
         </div>
 
-        <div className="flex items-center gap-2 print:hidden">
-          {activeSubTab === "indicators" ? (
-            <>
-              <button
-                onClick={() => setIsCreating(true)}
-                className="p-2 px-3 bg-indigo-600 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 hover:bg-slate-900 transition-all cursor-pointer shadow-3xs"
-              >
-                <Plus className="w-4 h-4" /> Novo Indicador
-              </button>
-              <button
-                onClick={resetToPreset}
-                className="p-2 px-3 border border-slate-200 text-slate-600 bg-white font-bold text-xs rounded-xl flex items-center gap-1.5 hover:bg-slate-50 transition-all cursor-pointer shadow-3xs"
-                title="Redefinir para dados de fábrica"
-              >
-                Reconfigurar Padrão
-              </button>
-            </>
-          ) : (
-            <button
-              onClick={() => setIsCreatingAction(true)}
-              className="p-2 px-3 bg-indigo-600 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 hover:bg-slate-900 transition-all cursor-pointer shadow-3xs"
-            >
-              <Plus className="w-4 h-4" /> Novo Plano de Ação
-            </button>
-          )}
-        </div>
+        <h2 className="text-xl font-black text-slate-800 tracking-tight flex items-center gap-2">
+          <FileSpreadsheet className="w-5.5 h-5.5 text-indigo-505" />
+
+          {activeSubTab === "indicators"
+            ? "OMI — Objetivos, Metas e Indicadores"
+            : "Planos de Ação OMI — Metodologia 5W2H"}
+
+          <span className="rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-700">
+            Versão 2026
+          </span>
+        </h2>
       </div>
 
-      {/* SUB-TABS SELECTOR */}
+      <div className="flex items-center gap-2 print:hidden">
+        {activeSubTab === "indicators" ? (
+          <>
+            <button
+              onClick={() => setIsCreating(true)}
+              className="p-2 px-3 bg-indigo-600 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 hover:bg-slate-900 transition-all cursor-pointer shadow-3xs"
+            >
+              <Plus className="w-4 h-4" /> Novo Indicador
+            </button>
+
+            <button
+              onClick={resetToPreset}
+              className="p-2 px-3 border border-slate-200 text-slate-600 bg-white font-bold text-xs rounded-xl flex items-center gap-1.5 hover:bg-slate-50 transition-all cursor-pointer shadow-3xs"
+              title="Redefinir para dados de fábrica"
+            >
+              Reconfigurar Padrão
+            </button>
+          </>
+        ) : (
+          <button
+            onClick={() => setIsCreatingAction(true)}
+            className="p-2 px-3 bg-indigo-600 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 hover:bg-slate-900 transition-all cursor-pointer shadow-3xs"
+          >
+            <Plus className="w-4 h-4" /> Novo Plano de Ação
+          </button>
+        )}
+      </div>
+    </div>
       <div className="flex border-b border-slate-200 gap-6 print:hidden -mt-2">
         <button
           onClick={() => setActiveSubTab("indicators")}
