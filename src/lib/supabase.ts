@@ -453,3 +453,97 @@ export async function deleteOmiActionPlanFromDb(id: string): Promise<boolean> {
     return false;
   }
 }
+
+// --- OMI INDICATOR MONTHLY RESULTS ---
+
+export interface OmiIndicatorResult {
+  id?: number;
+  indicatorId: string;
+  year: number;
+  month: number;
+  result: number | null;
+}
+
+export async function getOmiIndicatorResults(
+  year: number,
+  month: number
+): Promise<OmiIndicatorResult[] | null> {
+  try {
+    const { data, error } = await supabase
+      .from("omi_indicator_results")
+      .select("*")
+      .eq("year", year)
+      .eq("month", month)
+      .order("indicator_id", { ascending: true });
+
+    if (error) {
+      console.warn(
+        "Erro ao buscar resultados mensais dos indicadores OMI:",
+        error.message
+      );
+      return null;
+    }
+
+    return data.map((item: any) => ({
+      id: item.id,
+      indicatorId: item.indicator_id,
+      year: item.year,
+      month: item.month,
+      result: item.result === null ? null : Number(item.result)
+    }));
+  } catch (error) {
+    console.error(
+      "Falha ao buscar resultados mensais dos indicadores OMI:",
+      error
+    );
+    return null;
+  }
+}
+
+export async function saveOmiIndicatorResults(
+  items: OmiIndicatorResult[]
+): Promise<{ success: boolean; error?: any }> {
+  try {
+    if (items.length === 0) {
+      return { success: true };
+    }
+
+    const formatted = items.map((item) => ({
+      indicator_id: item.indicatorId,
+      year: item.year,
+      month: item.month,
+      result: item.result,
+      updated_at: new Date().toISOString()
+    }));
+
+    const { error } = await supabase
+      .from("omi_indicator_results")
+      .upsert(formatted, {
+        onConflict: "indicator_id,year,month"
+      });
+
+    if (error) {
+      console.error(
+        "Erro ao salvar resultados mensais dos indicadores OMI:",
+        error
+      );
+
+      return {
+        success: false,
+        error
+      };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error(
+      "Falha ao salvar resultados mensais dos indicadores OMI:",
+      error
+    );
+
+    return {
+      success: false,
+      error
+    };
+  }
+}

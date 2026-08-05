@@ -31,7 +31,10 @@ import OmiActionPlansTab, { OmiActionPlan, PRESET_OMI_ACTION_PLANS } from "./Omi
 import {
   getOmiActionPlans,
   saveOmiActionPlans,
-  deleteOmiActionPlanFromDb
+  deleteOmiActionPlanFromDb,
+  getOmiIndicatorResults,
+  saveOmiIndicatorResults,
+  OmiIndicatorResult
 } from "../lib/supabase";
 
 export interface OmiItem {
@@ -398,7 +401,36 @@ export default function OmiDashboard({
 
   console.log("OMI DASHBOARD RENDERIZOU");
 
-  const [activeSubTab, setActiveSubTab] = useState<"indicators" | "actions">("indicators");
+  const [activeSubTab, setActiveSubTab] = useState<"indicators" | "monthly-results" | "actions">("indicators");
+
+  const [isEditingMonthlyResults, setIsEditingMonthlyResults] = useState(false);
+
+const [selectedResultYear, setSelectedResultYear] = useState(2026);
+const [selectedResultMonth, setSelectedResultMonth] = useState(
+  new Date().getMonth() + 1
+);
+
+const [monthlyResults, setMonthlyResults] = useState<OmiIndicatorResult[]>([]);
+const [isLoadingMonthlyResults, setIsLoadingMonthlyResults] = useState(false);
+const [isSavingMonthlyResults, setIsSavingMonthlyResults] = useState(false);
+
+useEffect(() => {
+  if (activeSubTab !== "monthly-results") return;
+
+  async function loadMonthlyResults() {
+    setIsLoadingMonthlyResults(true);
+
+    const data = await getOmiIndicatorResults(
+      selectedResultYear,
+      selectedResultMonth
+    );
+
+    setMonthlyResults(data ?? []);
+    setIsLoadingMonthlyResults(false);
+  }
+
+  loadMonthlyResults();
+}, [activeSubTab, selectedResultYear, selectedResultMonth]);
 
   const [items, setItems] = useState<OmiItem[]>(() => {
     const saved = localStorage.getItem("omi_dashboard_items_v1");
@@ -818,28 +850,41 @@ useEffect(() => {
         )}
       </div>
     </div>
+
       <div className="flex border-b border-slate-200 gap-6 print:hidden -mt-2">
-        <button
-          onClick={() => setActiveSubTab("indicators")}
-          className={`pb-3 text-xs font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer ${
-            activeSubTab === "indicators" 
-              ? "border-indigo-600 text-indigo-600 font-black" 
-              : "border-transparent text-slate-400 hover:text-slate-650"
-          }`}
-        >
-          Indicadores OMI ({totalCount})
-        </button>
-        <button
-          onClick={() => setActiveSubTab("actions")}
-          className={`pb-3 text-xs font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer ${
-            activeSubTab === "actions" 
-              ? "border-indigo-600 text-indigo-600 font-black" 
-              : "border-transparent text-slate-400 hover:text-slate-650"
-          }`}
-        >
-          Planos de Ação 5W2H ({actionPlans.length})
-        </button>
-      </div>
+  <button
+    onClick={() => setActiveSubTab("indicators")}
+    className={`pb-3 text-xs font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer ${
+      activeSubTab === "indicators"
+        ? "border-indigo-600 text-indigo-600 font-black"
+        : "border-transparent text-slate-400 hover:text-slate-650"
+    }`}
+  >
+    Indicadores OMI ({totalCount})
+  </button>
+
+  <button
+    onClick={() => setActiveSubTab("monthly-results")}
+    className={`pb-3 text-xs font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer ${
+      activeSubTab === "monthly-results"
+        ? "border-indigo-600 text-indigo-600 font-black"
+        : "border-transparent text-slate-400 hover:text-slate-650"
+    }`}
+  >
+    Resultados Mensais
+  </button>
+
+  <button
+    onClick={() => setActiveSubTab("actions")}
+    className={`pb-3 text-xs font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer ${
+      activeSubTab === "actions"
+        ? "border-indigo-600 text-indigo-600 font-black"
+        : "border-transparent text-slate-400 hover:text-slate-650"
+    }`}
+  >
+    Planos de Ação 5W2H ({actionPlans.length})
+  </button>
+</div>
 
       {/* INDICATORS TAB CONTENT */}
       {activeSubTab === "indicators" && (
@@ -1055,6 +1100,153 @@ useEffect(() => {
       )}
 
       {/* ACTION PLANS TAB CONTENT */}
+
+      {/* MONTHLY RESULTS TAB CONTENT */}
+{activeSubTab === "monthly-results" && (
+  <div className="space-y-6 animate-in fade-in duration-200">
+    <div className="bg-white border border-slate-150 rounded-2xl p-5 shadow-3xs">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h3 className="text-base font-black text-slate-800">
+            Resultados Mensais dos Indicadores
+          </h3>
+
+          <p className="text-xs text-slate-500 mt-1">
+            Selecione o mês e informe os resultados de cada indicador OMI.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <select
+            value={selectedResultMonth}
+            onChange={(e) => setSelectedResultMonth(Number(e.target.value))}
+            className="text-xs p-2.5 border border-slate-200 rounded-xl bg-white"
+          >
+            <option value={1}>Janeiro</option>
+            <option value={2}>Fevereiro</option>
+            <option value={3}>Março</option>
+            <option value={4}>Abril</option>
+            <option value={5}>Maio</option>
+            <option value={6}>Junho</option>
+            <option value={7}>Julho</option>
+            <option value={8}>Agosto</option>
+            <option value={9}>Setembro</option>
+            <option value={10}>Outubro</option>
+            <option value={11}>Novembro</option>
+            <option value={12}>Dezembro</option>
+          </select>
+
+          <select
+            value={selectedResultYear}
+            onChange={(e) => setSelectedResultYear(Number(e.target.value))}
+            className="text-xs p-2.5 border border-slate-200 rounded-xl bg-white"
+          >
+            <option value={2026}>2026</option>
+            <option value={2027}>2027</option>
+            <option value={2028}>2028</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div className="bg-white border border-slate-150 rounded-2xl shadow-3xs overflow-hidden">
+      <table className="w-full text-left border-collapse">
+        <thead>
+          <tr className="bg-slate-50 border-b border-slate-150 text-[10px] font-black uppercase text-slate-500 tracking-wider">
+            <th className="py-3 px-4">Indicador</th>
+            <th className="py-3 px-4 w-28">Meta</th>
+            <th className="py-3 px-4 w-40">Resultado</th>
+          </tr>
+        </thead>
+
+        <tbody className="divide-y divide-slate-100">
+          {items.map((item) => (
+            <tr key={item.id}>
+              <td className="py-3.5 px-4">
+                <span className="font-bold text-slate-800 text-xs">
+                  {item.indicator}
+                </span>
+              </td>
+
+              <td className="py-3.5 px-4 text-xs font-mono font-bold text-slate-700">
+                {item.target} {item.unit}
+              </td>
+
+              <td className="py-3.5 px-4">
+                <input
+  type="number"
+  step="any"
+  value={
+    monthlyResults.find(
+      (result) => result.indicatorId === item.id
+    )?.result ?? ""
+  }
+  onChange={(e) => {
+    const value =
+      e.target.value === ""
+        ? null
+        : Number(e.target.value);
+
+    setMonthlyResults((current) => {
+      const existing = current.find(
+        (result) => result.indicatorId === item.id
+      );
+
+      if (existing) {
+        return current.map((result) =>
+          result.indicatorId === item.id
+            ? { ...result, result: value }
+            : result
+        );
+      }
+
+      return [
+        ...current,
+        {
+          indicatorId: item.id,
+          year: selectedResultYear,
+          month: selectedResultMonth,
+          result: value
+        }
+      ];
+    });
+  }}
+  className="w-full text-xs p-2.5 border border-slate-200 rounded-xl bg-white"
+  placeholder="Resultado"
+/>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+
+    <div className="flex justify-end">
+      <button
+  type="button"
+  disabled={isSavingMonthlyResults}
+  onClick={async () => {
+    setIsSavingMonthlyResults(true);
+
+    const response = await saveOmiIndicatorResults(monthlyResults);
+
+    setIsSavingMonthlyResults(false);
+
+    if (response.success) {
+      alert("Resultados salvos com sucesso!");
+    } else {
+      alert("Erro ao salvar os resultados.");
+      console.error(response.error);
+    }
+  }}
+  className="px-4 py-2.5 bg-indigo-600 text-white text-xs font-bold rounded-xl disabled:opacity-60"
+>
+  {isSavingMonthlyResults ? "Salvando..." : "Salvar Resultados"}
+</button>
+    </div>
+  </div>
+)}
+
       {activeSubTab === "actions" && (
         <OmiActionPlansTab 
           actionPlans={actionPlans} 
