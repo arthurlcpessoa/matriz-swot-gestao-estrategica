@@ -33,9 +33,15 @@ import {
   saveOmiActionPlans,
   deleteOmiActionPlanFromDb,
   getOmiIndicatorResults,
+  getOmiIndicatorResultsByYear,
   saveOmiIndicatorResults,
-  OmiIndicatorResult
+  getOmiIndicatorSettings,
+  saveOmiIndicatorSettings,
+  OmiFinalMeasurement,
+  OmiIndicatorSetting
 } from "../lib/supabase";
+
+import { calculateIndicatorResult } from "../lib/indicatorCalculations";
 
 export interface OmiItem {
   id: string;
@@ -50,7 +56,10 @@ export interface OmiItem {
   target: number;
   actual: number;
   unit: string;
+  finalMeasurement: OmiFinalMeasurement;
 }
+
+
 
 const PRESET_OMI_ITEMS: OmiItem[] = [
   {
@@ -65,7 +74,8 @@ const PRESET_OMI_ITEMS: OmiItem[] = [
     preference: "MAIOR",
     target: 75,
     actual: 78,
-    unit: "Score"
+    unit: "Score",
+    finalMeasurement: "last"
   },
   {
     id: "omi-2",
@@ -79,7 +89,8 @@ const PRESET_OMI_ITEMS: OmiItem[] = [
     preference: "MAIOR",
     target: 50,
     actual: 52,
-    unit: "Score"
+    unit: "Score",
+    finalMeasurement: "last"
   },
   {
     id: "omi-3",
@@ -93,7 +104,8 @@ const PRESET_OMI_ITEMS: OmiItem[] = [
     preference: "MAIOR",
     target: 45,
     actual: 43,
-    unit: "Score"
+    unit: "Score",
+    finalMeasurement: "last"
   },
   {
     id: "omi-4",
@@ -107,7 +119,8 @@ const PRESET_OMI_ITEMS: OmiItem[] = [
     preference: "MENOR",
     target: 1.0,
     actual: 0.5,
-    unit: "Taxa"
+    unit: "Taxa",
+    finalMeasurement: "last"
   },
   {
     id: "omi-5",
@@ -121,7 +134,8 @@ const PRESET_OMI_ITEMS: OmiItem[] = [
     preference: "MAIOR",
     target: 95,
     actual: 98.2,
-    unit: "%"
+    unit: "%",
+    finalMeasurement: "average"
   },
   {
     id: "omi-6",
@@ -135,7 +149,8 @@ const PRESET_OMI_ITEMS: OmiItem[] = [
     preference: "MAIOR",
     target: 80,
     actual: 85,
-    unit: "%"
+    unit: "%",
+    finalMeasurement: "last"
   },
   {
     id: "omi-7",
@@ -149,7 +164,8 @@ const PRESET_OMI_ITEMS: OmiItem[] = [
     preference: "MAIOR",
     target: 4.0,
     actual: 3.8,
-    unit: "Nível"
+    unit: "Nível",
+    finalMeasurement: "last"
   },
   {
     id: "omi-8",
@@ -163,7 +179,8 @@ const PRESET_OMI_ITEMS: OmiItem[] = [
     preference: "MAIOR",
     target: 92,
     actual: 94.5,
-    unit: "%"
+    unit: "%",
+    finalMeasurement: "average"
   },
   {
     id: "omi-9",
@@ -177,7 +194,8 @@ const PRESET_OMI_ITEMS: OmiItem[] = [
     preference: "MAIOR",
     target: 95,
     actual: 96,
-    unit: "Score"
+    unit: "Score",
+    finalMeasurement: "average"
   },
   {
     id: "omi-10",
@@ -191,7 +209,8 @@ const PRESET_OMI_ITEMS: OmiItem[] = [
     preference: "MAIOR",
     target: 100,
     actual: 100,
-    unit: "%"
+    unit: "%",
+    finalMeasurement: "last"
   },
   {
     id: "omi-11",
@@ -205,7 +224,8 @@ const PRESET_OMI_ITEMS: OmiItem[] = [
     preference: "MENOR",
     target: 1.0,
     actual: 0.5,
-    unit: "Taxa"
+    unit: "Taxa",
+    finalMeasurement: "average"
   },
   {
     id: "omi-12",
@@ -219,7 +239,8 @@ const PRESET_OMI_ITEMS: OmiItem[] = [
     preference: "MAIOR",
     target: 90,
     actual: 93.5,
-    unit: "Score"
+    unit: "Score",
+    finalMeasurement: "average"
   },
   {
     id: "omi-13",
@@ -233,7 +254,8 @@ const PRESET_OMI_ITEMS: OmiItem[] = [
     preference: "MAIOR",
     target: 85,
     actual: 88,
-    unit: "%"
+    unit: "%",
+    finalMeasurement: "average"
   },
   {
     id: "omi-14",
@@ -247,7 +269,8 @@ const PRESET_OMI_ITEMS: OmiItem[] = [
     preference: "MAIOR",
     target: 95,
     actual: 92,
-    unit: "%"
+    unit: "%",
+    finalMeasurement: "ytd"
   },
   {
     id: "omi-15",
@@ -261,7 +284,8 @@ const PRESET_OMI_ITEMS: OmiItem[] = [
     preference: "MAIOR",
     target: 90,
     actual: 91.5,
-    unit: "%"
+    unit: "%",
+    finalMeasurement: "last"
   },
   {
     id: "omi-16",
@@ -275,7 +299,8 @@ const PRESET_OMI_ITEMS: OmiItem[] = [
     preference: "MAIOR",
     target: 400,
     actual: 420,
-    unit: "Milhões R$"
+    unit: "Milhões R$",
+    finalMeasurement: "last"
   },
   {
     id: "omi-17",
@@ -289,7 +314,8 @@ const PRESET_OMI_ITEMS: OmiItem[] = [
     preference: "MAIOR",
     target: 80,
     actual: 76.5,
-    unit: "%"
+    unit: "%",
+    finalMeasurement: "last"
   },
   {
     id: "omi-18",
@@ -303,7 +329,8 @@ const PRESET_OMI_ITEMS: OmiItem[] = [
     preference: "MAIOR",
     target: 95,
     actual: 93,
-    unit: "%"
+    unit: "%",
+    finalMeasurement: "average"
   },
   {
     id: "omi-19",
@@ -317,7 +344,8 @@ const PRESET_OMI_ITEMS: OmiItem[] = [
     preference: "MAIOR",
     target: 98,
     actual: 100,
-    unit: "%"
+    unit: "%",
+    finalMeasurement: "average"
   },
   {
     id: "omi-20",
@@ -331,7 +359,8 @@ const PRESET_OMI_ITEMS: OmiItem[] = [
     preference: "MAIOR",
     target: 70,
     actual: 74,
-    unit: "Score"
+    unit: "Score",
+    finalMeasurement: "average"
   },
   {
     id: "omi-21",
@@ -345,7 +374,8 @@ const PRESET_OMI_ITEMS: OmiItem[] = [
     preference: "MAIOR",
     target: 100,
     actual: 108,
-    unit: "Milhões R$"
+    unit: "Milhões R$",
+    finalMeasurement: "sum"
   },
   {
     id: "omi-22",
@@ -359,7 +389,8 @@ const PRESET_OMI_ITEMS: OmiItem[] = [
     preference: "MAIOR",
     target: 250,
     actual: 280,
-    unit: "Milhões R$"
+    unit: "Milhões R$",
+    finalMeasurement: "sum"
   },
   {
     id: "omi-23",
@@ -373,7 +404,8 @@ const PRESET_OMI_ITEMS: OmiItem[] = [
     preference: "MAIOR",
     target: 20,
     actual: 19.5,
-    unit: "%"
+    unit: "%",
+    finalMeasurement: "last"
   },
   {
     id: "omi-24",
@@ -387,7 +419,8 @@ const PRESET_OMI_ITEMS: OmiItem[] = [
     preference: "MAIOR",
     target: 100,
     actual: 102.5,
-    unit: "%"
+    unit: "%",
+    finalMeasurement: "last"
   }
 ];
 
@@ -414,6 +447,15 @@ const [monthlyResults, setMonthlyResults] = useState<OmiIndicatorResult[]>([]);
 const [isLoadingMonthlyResults, setIsLoadingMonthlyResults] = useState(false);
 const [isSavingMonthlyResults, setIsSavingMonthlyResults] = useState(false);
 
+const [yearlyResults, setYearlyResults] = useState<OmiIndicatorResult[]>([]);
+
+const [indicatorMeasurements, setIndicatorMeasurements] = useState<
+  Record<string, OmiFinalMeasurement>
+>({});
+
+const [isLoadingMeasurements, setIsLoadingMeasurements] = useState(false);
+const [isSavingMeasurements, setIsSavingMeasurements] = useState(false);
+
 useEffect(() => {
   if (activeSubTab !== "monthly-results") return;
 
@@ -431,6 +473,93 @@ useEffect(() => {
 
   loadMonthlyResults();
 }, [activeSubTab, selectedResultYear, selectedResultMonth]);
+
+useEffect(() => {
+  async function loadYearlyResults() {
+    const data = await getOmiIndicatorResultsByYear(
+      selectedResultYear
+    );
+
+    setYearlyResults(data ?? []);
+  }
+
+  loadYearlyResults();
+}, [selectedResultYear]);
+
+useEffect(() => {
+  async function loadIndicatorMeasurements() {
+    setIsLoadingMeasurements(true);
+
+    const data = await getOmiIndicatorSettings();
+
+    // Sem leitura confiável do Supabase, não arriscamos gravar nada.
+    if (!data) {
+      setIsLoadingMeasurements(false);
+      return;
+    }
+
+    const existingMeasurements = data.reduce<
+      Record<string, OmiFinalMeasurement>
+    >((accumulator, setting) => {
+      accumulator[setting.indicatorId] = setting.finalMeasurement;
+      return accumulator;
+    }, {});
+
+    // Carga inicial segura: cria no Supabase apenas a configuração dos
+    // indicadores padrão que ainda não têm registro, usando o
+    // finalMeasurement definido em PRESET_OMI_ITEMS. Configurações já
+    // existentes no banco nunca são sobrescritas.
+    const missingPresetSettings: OmiIndicatorSetting[] = PRESET_OMI_ITEMS
+      .filter((preset) => !(preset.id in existingMeasurements))
+      .map((preset) => ({
+        indicatorId: preset.id,
+        finalMeasurement: preset.finalMeasurement
+      }));
+
+    if (missingPresetSettings.length > 0) {
+      const backfillResult = await saveOmiIndicatorSettings(missingPresetSettings);
+
+      if (!backfillResult.success) {
+        console.error(
+          "Erro na carga inicial de mensurações dos indicadores padrão OMI:",
+          backfillResult.error
+        );
+      }
+    }
+
+    const measurementsMap = { ...existingMeasurements };
+    missingPresetSettings.forEach((setting) => {
+      measurementsMap[setting.indicatorId] = setting.finalMeasurement;
+    });
+
+    setIndicatorMeasurements(measurementsMap);
+    setIsLoadingMeasurements(false);
+  }
+
+  loadIndicatorMeasurements();
+}, []);
+
+function getIndicatorYearResults(indicatorId: string) {
+  return yearlyResults
+    .filter((item) => item.indicatorId === indicatorId)
+    .map((item) => ({
+      month: item.month,
+      result: item.result
+    }));
+}
+
+// Fonte única de mensuração final por indicador, nesta ordem de prioridade:
+// 1) indicatorMeasurements[item.id] — configuração persistida no Supabase (omi_indicator_settings);
+// 2) item.finalMeasurement — valor do preset/local, usado enquanto a config do Supabase não chegou;
+// 3) "last" — fallback final para indicadores antigos/customizados sem nenhuma configuração.
+function resolveFinalMeasurement(item: OmiItem): OmiFinalMeasurement {
+  return indicatorMeasurements[item.id] ?? item.finalMeasurement ?? "last";
+}
+
+function getIndicatorFinalResult(item: OmiItem): number | null {
+  const results = getIndicatorYearResults(item.id);
+  return calculateIndicatorResult(resolveFinalMeasurement(item), results);
+}
 
   const [items, setItems] = useState<OmiItem[]>(() => {
     const saved = localStorage.getItem("omi_dashboard_items_v1");
@@ -490,6 +619,9 @@ useEffect(() => {
   const [newTarget, setNewTarget] = useState<number>(100);
   const [newActual, setNewActual] = useState<number>(100);
   const [newUnit, setNewUnit] = useState("%");
+
+  const [newFinalMeasurement, setNewFinalMeasurement] =
+  useState<OmiFinalMeasurement>("last");
 
   // Create Action Plan State
   const [isCreatingAction, setIsCreatingAction] = useState(false);
@@ -597,7 +729,7 @@ useEffect(() => {
       case "Longevidade":
         return "bg-sky-50 text-sky-700 border border-sky-200";
       case "Crescimento":
-        return "bg-emerald-50 text-emerald-700 border border-emerald-200";
+        return "bg-emerald-50 text-emerald-700 border border-emerald-200";  
       case "Lucratividade":
         return "bg-amber-50 text-amber-700 border border-amber-250";
       case "Caixa":
@@ -641,15 +773,29 @@ useEffect(() => {
   const uniqueCommitteesCount = Array.from(new Set(filteredItems.map(i => i.committee))).length;
   const uniqueStakeholdersCount = Array.from(new Set(filteredItems.map(i => i.stakeholder))).length;
 
-  const handleSaveEdit = (e: React.FormEvent) => {
-    e.preventDefault(); 
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
     if (!editingItem) return;
 
     setItems(prev => prev.map(item => item.id === editingItem.id ? editingItem : item));
+
+    const result = await saveOmiIndicatorSettings([
+      { indicatorId: editingItem.id, finalMeasurement: editingItem.finalMeasurement }
+    ]);
+
+    if (result.success) {
+      setIndicatorMeasurements((prev: Record<string, OmiFinalMeasurement>) => ({
+        ...prev,
+        [editingItem.id]: editingItem.finalMeasurement
+      }));
+    } else {
+      console.error("Erro ao salvar mensuração final do indicador OMI:", result.error);
+    }
+
     setEditingItem(null);
   };
 
-  const handleCreate = (e: React.FormEvent) => {
+  const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newIndicator || !newObjective || !newStakeholder) {
       alert("Preencha todos os campos obrigatórios (*)");
@@ -668,12 +814,27 @@ useEffect(() => {
       preference: newPreference,
       target: newTarget,
       actual: newActual,
-      unit: newUnit
+      unit: newUnit,
+      finalMeasurement: newFinalMeasurement
     };
 
     setItems(prev => [...prev, newItem]);
+
+    const result = await saveOmiIndicatorSettings([
+      { indicatorId: newItem.id, finalMeasurement: newItem.finalMeasurement }
+    ]);
+
+    if (result.success) {
+      setIndicatorMeasurements((prev: Record<string, OmiFinalMeasurement>) => ({
+        ...prev,
+        [newItem.id]: newItem.finalMeasurement
+      }));
+    } else {
+      console.error("Erro ao salvar mensuração final do novo indicador OMI:", result.error);
+    }
+
     setIsCreating(false);
-    
+
     // reset form
     setNewObjective("");
     setNewStakeholder("");
@@ -684,6 +845,7 @@ useEffect(() => {
     setNewTarget(100);
     setNewActual(100);
     setNewUnit("%");
+    setNewFinalMeasurement("last");
   };
 
   const handleDelete = (id: string) => {
@@ -1012,6 +1174,8 @@ useEffect(() => {
                     <th className="py-3 px-4 w-40">Painel / Comitê</th>
                     <th className="py-3 px-4 min-w-[180px]">Indicador</th>
                     <th className="py-3 px-4 text-center w-28">Meta</th>
+                    <th className="py-3 px-4 text-center w-32">Mensuração Final</th>
+                    <th className="py-3 px-4 text-center w-32">Resultado Final</th>
                     <th className="py-3 px-4 text-center w-16 print:hidden">Ações</th>
                   </tr>
                 </thead>
@@ -1059,15 +1223,57 @@ useEffect(() => {
                           </td>
 
                           {/* Target */}
-                          <td className="py-3.5 px-4 text-center font-mono font-bold text-slate-800">
-                            {item.target} <span className="text-[9px] text-slate-400 font-normal">{item.unit}</span>
-                          </td>
+<td className="py-3.5 px-4 text-center font-mono font-bold text-slate-800">
+  {item.target}
+  <span className="text-[9px] text-slate-400 font-normal">
+    {" "}{item.unit}
+  </span>
+</td>
 
-                          {/* Actions */}
+{/* Final Measurement */}
+<td className="py-3.5 px-4 text-center">
+  {(() => {
+    const measurement = resolveFinalMeasurement(item);
+
+    return (
+      <span className="inline-flex rounded-lg border border-indigo-150 bg-indigo-50 px-2 py-1 text-[9px] font-black uppercase text-indigo-700">
+        {measurement === "last"
+          ? "Último"
+          : measurement === "average"
+            ? "Média"
+            : measurement === "sum"
+              ? "Soma"
+              : "Acumulado YTD"}
+      </span>
+    );
+  })()}
+</td>
+
+{/* Final Result */}
+<td className="py-3.5 px-4 text-center font-mono font-black text-slate-800">
+  {(() => {
+    const finalResult = getIndicatorFinalResult(item);
+
+    if (finalResult === null) {
+      return <span className="text-slate-400">—</span>;
+    }
+
+    return (
+      <>
+        {Number(finalResult.toFixed(2))}
+        <span className="ml-1 text-[9px] font-normal text-slate-400">
+          {item.unit}
+        </span>
+      </>
+    );
+  })()}
+</td>
+
+{/* Actions */}
                           <td className="py-3.5 px-4 text-center print:hidden">
                             <div className="flex items-center justify-center gap-1.5 opacity-40 group-hover:opacity-100 transition-opacity">
                               <button
-                                onClick={() => setEditingItem(item)}
+                                onClick={() => setEditingItem({ ...item, finalMeasurement: resolveFinalMeasurement(item) })}
                                 className="p-1 text-slate-500 hover:text-indigo-650 hover:bg-slate-100 rounded-lg transition-all cursor-pointer"
                                 title="Editar Parâmetros OMI"
                               >
@@ -1087,7 +1293,7 @@ useEffect(() => {
                     })
                   ) : (
                     <tr>
-                      <td colSpan={8} className="py-12 text-center text-slate-400 font-medium italic">
+                      <td colSpan={10} className="py-12 text-center text-slate-400 font-medium italic">
                         Nenhum indicador OMI encontrado com os filtros aplicados.
                       </td>
                     </tr>
@@ -1389,7 +1595,7 @@ useEffect(() => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 gap-2">
+              <div className="grid grid-cols-2 gap-3.5">
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Unidade de Medida</label>
                   <input
@@ -1399,6 +1605,21 @@ useEffect(() => {
                     onChange={(e) => setEditingItem({ ...editingItem, unit: e.target.value })}
                     className="w-full text-xs p-2.5 border border-slate-200 rounded-xl bg-white focus:outline-hidden focus:border-indigo-500 shadow-3xs"
                   />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Mensuração Final *</label>
+                  <select
+                    required
+                    value={editingItem.finalMeasurement}
+                    onChange={(e) => setEditingItem({ ...editingItem, finalMeasurement: e.target.value as OmiFinalMeasurement })}
+                    className="w-full text-xs p-2.5 border border-slate-200 rounded-xl bg-white focus:outline-hidden focus:border-indigo-500 shadow-3xs"
+                  >
+                    <option value="last">Último Resultado</option>
+                    <option value="average">Média</option>
+                    <option value="sum">Soma</option>
+                    <option value="ytd">Acumulado (YTD)</option>
+                  </select>
                 </div>
               </div>
 
@@ -1554,15 +1775,32 @@ useEffect(() => {
                 </div>
               </div>
 
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Unidade de Medida</label>
-                <input
-                  type="text"
-                  placeholder="Ex: %, Score, Milhões R$, Taxa..."
-                  value={newUnit}
-                  onChange={(e) => setNewUnit(e.target.value)}
-                  className="w-full text-xs p-2.5 border border-slate-200 rounded-xl bg-white focus:outline-hidden focus:border-indigo-500 shadow-3xs"
-                />
+              <div className="grid grid-cols-2 gap-3.5">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Unidade de Medida</label>
+                  <input
+                    type="text"
+                    placeholder="Ex: %, Score, Milhões R$, Taxa..."
+                    value={newUnit}
+                    onChange={(e) => setNewUnit(e.target.value)}
+                    className="w-full text-xs p-2.5 border border-slate-200 rounded-xl bg-white focus:outline-hidden focus:border-indigo-500 shadow-3xs"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Mensuração Final *</label>
+                  <select
+                    required
+                    value={newFinalMeasurement}
+                    onChange={(e) => setNewFinalMeasurement(e.target.value as OmiFinalMeasurement)}
+                    className="w-full text-xs p-2.5 border border-slate-200 rounded-xl bg-white focus:outline-hidden focus:border-indigo-500 shadow-3xs"
+                  >
+                    <option value="last">Último Resultado</option>
+                    <option value="average">Média</option>
+                    <option value="sum">Soma</option>
+                    <option value="ytd">Acumulado (YTD)</option>
+                  </select>
+                </div>
               </div>
 
               <div className="flex justify-end gap-2 pt-4 border-t border-slate-100">

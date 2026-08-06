@@ -500,6 +500,43 @@ export async function getOmiIndicatorResults(
   }
 }
 
+export async function getOmiIndicatorResultsByYear(
+  year: number
+): Promise<OmiIndicatorResult[] | null> {
+  try {
+    const { data, error } = await supabase
+      .from("omi_indicator_results")
+      .select("*")
+      .eq("year", year)
+      .order("indicator_id", { ascending: true })
+      .order("month", { ascending: true });
+
+    if (error) {
+      console.warn(
+        "Erro ao buscar resultados anuais dos indicadores OMI:",
+        error.message
+      );
+      return null;
+    }
+
+    return data.map((item: any) => ({
+      indicatorId: item.indicator_id,
+      year: item.year,
+      month: item.month,
+      result:
+        item.result !== null
+          ? Number(item.result)
+          : null
+    }));
+  } catch (error) {
+    console.error(
+      "Falha ao buscar resultados anuais dos indicadores OMI:",
+      error
+    );
+    return null;
+  }
+}
+
 export async function saveOmiIndicatorResults(
   items: OmiIndicatorResult[]
 ): Promise<{ success: boolean; error?: any }> {
@@ -538,6 +575,95 @@ export async function saveOmiIndicatorResults(
   } catch (error) {
     console.error(
       "Falha ao salvar resultados mensais dos indicadores OMI:",
+      error
+    );
+
+    return {
+      success: false,
+      error
+    };
+  }
+}
+
+// --- OMI INDICATOR SETTINGS ---
+
+export type OmiFinalMeasurement =
+  | "last"
+  | "average"
+  | "sum"
+  | "ytd";
+
+export interface OmiIndicatorSetting {
+  indicatorId: string;
+  finalMeasurement: OmiFinalMeasurement;
+}
+
+export async function getOmiIndicatorSettings(): Promise<
+  OmiIndicatorSetting[] | null
+> {
+  try {
+    const { data, error } = await supabase
+      .from("omi_indicator_settings")
+      .select("*")
+      .order("indicator_id", { ascending: true });
+
+    if (error) {
+      console.warn(
+        "Erro ao buscar mensurações finais dos indicadores OMI:",
+        error.message
+      );
+      return null;
+    }
+
+    return data.map((item: any) => ({
+      indicatorId: item.indicator_id,
+      finalMeasurement: item.final_measurement as OmiFinalMeasurement
+    }));
+  } catch (error) {
+    console.error(
+      "Falha ao buscar mensurações finais dos indicadores OMI:",
+      error
+    );
+    return null;
+  }
+}
+
+export async function saveOmiIndicatorSettings(
+  items: OmiIndicatorSetting[]
+): Promise<{ success: boolean; error?: any }> {
+  try {
+    if (items.length === 0) {
+      return { success: true };
+    }
+
+    const formatted = items.map((item) => ({
+      indicator_id: item.indicatorId,
+      final_measurement: item.finalMeasurement,
+      updated_at: new Date().toISOString()
+    }));
+
+    const { error } = await supabase
+      .from("omi_indicator_settings")
+      .upsert(formatted, {
+        onConflict: "indicator_id"
+      });
+
+    if (error) {
+      console.error(
+        "Erro ao salvar mensurações finais dos indicadores OMI:",
+        error
+      );
+
+      return {
+        success: false,
+        error
+      };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error(
+      "Falha ao salvar mensurações finais dos indicadores OMI:",
       error
     );
 
