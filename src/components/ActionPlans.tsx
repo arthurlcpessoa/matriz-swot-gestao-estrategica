@@ -1,47 +1,9 @@
 import React, { useState } from "react";
 import { ClipboardList, Search, User, Calendar, DollarSign, ArrowUpRight, CheckCircle2, Circle, Eye, Edit, Trash2, Plus, X, AlertTriangle, ChevronDown, ChevronUp, Sparkles } from "lucide-react";
 import { ActionPlanItem, RiskItem, OpportunityItem } from "../types";
-
-// Helper para detectar qual mês o texto se refere
-function parseMonthFromWhen(whenStr: string): number | null {
-  if (!whenStr) return null;
-  const clean = whenStr.toLowerCase().trim();
-  
-  const ptMonths = [
-    ["janeiro", "jan"],
-    ["fevereiro", "fev"],
-    ["março", "mar"],
-    ["abril", "abr"],
-    ["maio", "mai"],
-    ["junho", "jun"],
-    ["julho", "jul"],
-    ["agosto", "ago"],
-    ["setembro", "set"],
-    ["outubro", "out"],
-    ["novembro", "nov"],
-    ["dezembro", "dez"]
-  ];
-
-  for (let i = 0; i < ptMonths.length; i++) {
-    for (const token of ptMonths[i]) {
-      if (clean.includes(token)) {
-        return i;
-      }
-    }
-  }
-
-  // Tentar extrair por número (ex: 01/2026 ou apenas /02/ ou -03-)
-  const numRegex = /(?:0[1-9]|1[0-2])\b/;
-  const match = clean.match(numRegex);
-  if (match) {
-    const num = parseInt(match[0], 10);
-    if (num >= 1 && num <= 12) {
-      return num - 1;
-    }
-  }
-
-  return null;
-}
+import { parseMonthFromWhen } from "../lib/planMonth";
+import { useActionPlanCompletionToggle } from "../hooks/useActionPlanCompletionToggle";
+import CompletionConfirmModal from "./CompletionConfirmModal";
 
 interface ActionPlansProps {
   plans: ActionPlanItem[];
@@ -94,13 +56,18 @@ export default function ActionPlans({
     suggestedKrs: []
   });
 
+  const {
+    pendingPlan: pendingCompletionPlan,
+    requestToggle: requestCompletionToggle,
+    cancel: cancelCompletionToggle,
+    confirmOnTime: confirmCompletionOnTime,
+    confirmLate: confirmCompletionLate
+  } = useActionPlanCompletionToggle(onUpdatePlan);
+
   const togglePlanCompletion = (id: string) => {
     const p = plans.find((item) => item.id === id);
     if (p) {
-      onUpdatePlan({
-        ...p,
-        completed: !p.completed
-      });
+      requestCompletionToggle(p);
     }
   };
 
@@ -1177,6 +1144,13 @@ export default function ActionPlans({
           </div>
         </div>
       )}
+
+      <CompletionConfirmModal
+        plan={pendingCompletionPlan}
+        onCancel={cancelCompletionToggle}
+        onConfirmOnTime={confirmCompletionOnTime}
+        onConfirmLate={confirmCompletionLate}
+      />
     </div>
   );
 }

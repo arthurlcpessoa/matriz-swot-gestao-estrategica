@@ -53,6 +53,16 @@ export interface ActionPlanItem {
   priority: 'Baixa' | 'Média' | 'Alta' | 'Crítica';
   suggestedKrs?: string[]; // Sugestões de Key Results (KRs) para monitoramento
   completed?: boolean;     // Status de conclusão: true = Concluído/Realizado, false/undefined = Pendente/Previsto
+
+  // Mês (0-11) em que o plano foi originalmente previsto, congelado na primeira
+  // gravação e nunca sobrescrito por alterações posteriores de "when".
+  // Usado como baseline para o Painel de Desempenho.
+  originalDeadlineMonth?: number | null;
+  // Classificação da conclusão, definida pelo usuário ao marcar o plano como concluído.
+  completionType?: 'no_prazo' | 'atrasado' | null;
+  // Mês (0-11) em que a conclusão realmente ocorreu. Igual a originalDeadlineMonth
+  // quando completionType é 'no_prazo'; informado manualmente quando 'atrasado'.
+  actualCompletionMonth?: number | null;
 }
 
 export interface StrategicAnalysisResponse {

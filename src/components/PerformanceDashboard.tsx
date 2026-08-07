@@ -26,61 +26,13 @@ import {
   X
 } from "lucide-react";
 import { ActionPlanItem } from "../types";
+import { MONTHS_FULL, MONTHS_SHORT, parseMonthFromWhen, getOriginalDeadlineMonth } from "../lib/planMonth";
+import { useActionPlanCompletionToggle } from "../hooks/useActionPlanCompletionToggle";
+import CompletionConfirmModal from "./CompletionConfirmModal";
 
 interface PerformanceDashboardProps {
   plans: ActionPlanItem[];
   onUpdatePlan: (updated: ActionPlanItem) => void;
-}
-
-const MONTHS_FULL = [
-  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
-  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
-];
-
-const MONTHS_SHORT = [
-  "Jan", "Fev", "Mar", "Abr", "Mai", "Jun", 
-  "Jul", "Ago", "Set", "Out", "Nov", "Dez"
-];
-
-// Helper para detectar qual mês o texto se refere
-function parseMonthFromWhen(whenStr: string): number | null {
-  if (!whenStr) return null;
-  const clean = whenStr.toLowerCase().trim();
-  
-  const ptMonths = [
-    ["janeiro", "jan"],
-    ["fevereiro", "fev"],
-    ["março", "mar"],
-    ["abril", "abr"],
-    ["maio", "mai"],
-    ["junho", "jun"],
-    ["julho", "jul"],
-    ["agosto", "ago"],
-    ["setembro", "set"],
-    ["outubro", "out"],
-    ["novembro", "nov"],
-    ["dezembro", "dez"]
-  ];
-
-  for (let i = 0; i < ptMonths.length; i++) {
-    for (const token of ptMonths[i]) {
-      if (clean.includes(token)) {
-        return i;
-      }
-    }
-  }
-
-  // Tentar extrair por número (ex: 01/2026 ou apenas /02/ ou -03-)
-  const numRegex = /(?:0[1-9]|1[0-2])\b/;
-  const match = clean.match(numRegex);
-  if (match) {
-    const num = parseInt(match[0], 10);
-    if (num >= 1 && num <= 12) {
-      return num - 1;
-    }
-  }
-
-  return null;
 }
 
 export default function PerformanceDashboard({ plans, onUpdatePlan }: PerformanceDashboardProps) {
@@ -96,30 +48,46 @@ export default function PerformanceDashboard({ plans, onUpdatePlan }: Performanc
     return () => clearTimeout(timer);
   }, [successToast]);
 
-  // Mapear planos para seus respectivos meses de previsão
-  // Para fins de flexibilidade, as ações cujo campo "when" não indica mês começam em "Outros" ou no mês atual se o usuário quiser configurar.
+  const {
+    pendingPlan: pendingCompletionPlan,
+    requestToggle: requestCompletionToggle,
+    cancel: cancelCompletionToggle,
+    confirmOnTime: confirmCompletionOnTime,
+    confirmLate: confirmCompletionLate
+  } = useActionPlanCompletionToggle(onUpdatePlan);
+
+  // Mapear planos para seu mês PREVISTO ORIGINAL (baseline imutável do indicador,
+  // não o prazo atual que pode ter sido alterado depois).
   const plansWithParsedMonth = plans.map(p => {
-    const detectedIdx = parseMonthFromWhen(p.when);
+    const detectedIdx = getOriginalDeadlineMonth(p);
     return {
       ...p,
-      detectedMonthIdx: detectedIdx // null se for indefinido/outros
+      detectedMonthIdx: detectedIdx // null se o prazo original for indefinido/outros
     };
   });
 
-  // Agrupar dados por mês (0 a 11)
+  // Agrupar dados por mês (0 a 11). Uma ação prevista para um mês e concluída
+  // com atraso em outro mês NÃO volta a contar como prevista no mês da
+  // conclusão — ela continua pesando negativamente no mês original, e sua
+  // conclusão tardia é registrada no mês em que realmente ocorreu.
   const monthlyData = MONTHS_SHORT.map((label, idx) => {
     const plansInMonth = plansWithParsedMonth.filter(p => p.detectedMonthIdx === idx);
     const previsto = plansInMonth.length;
-    const realizado = plansInMonth.filter(p => p.completed).length;
-    const pendente = previsto - realizado;
-    const porcentagem = previsto > 0 ? Math.round((realizado / previsto) * 100) : 0;
+    const concluidoNoPrazo = plansInMonth.filter(p => p.completionType === "no_prazo").length;
+    const concluidoComAtraso = plansInMonth.filter(p => p.completionType === "atrasado").length;
+    const concluidosComAtrasoNesteMes = plans.filter(
+      p => p.completionType === "atrasado" && p.actualCompletionMonth === idx
+    ).length;
+    const pendente = previsto - concluidoNoPrazo - concluidoComAtraso;
+    const porcentagem = previsto > 0 ? Math.round((concluidoNoPrazo / previsto) * 100) : 0;
 
     return {
       index: idx,
       name: label,
       fullName: MONTHS_FULL[idx],
       "Previstos": previsto,
-      "Realizados": realizado,
+      "Concluídos no Prazo": concluidoNoPrazo,
+      "Concluídos com Atraso": concluidosComAtrasoNesteMes,
       "Pendentes": pendente,
       "porcentagem": porcentagem,
       plans: plansInMonth
@@ -244,7 +212,7 @@ export default function PerformanceDashboard({ plans, onUpdatePlan }: Performanc
             <div>
               <h4 className="font-extrabold text-sm text-slate-850 flex items-center gap-1.5">
                 <BarChart2 className="w-4.5 h-4.5 text-indigo-650" />
-                Planos Previstos vs Realizados por Mês
+                Planos Previstos vs Concluídos por Mês
               </h4>
               <p className="text-[11px] text-slate-500">Clique em qualquer barra para abrir as tarefas daquele mês específico.</p>
             </div>
@@ -257,7 +225,11 @@ export default function PerformanceDashboard({ plans, onUpdatePlan }: Performanc
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 bg-emerald-500 rounded-xs"></span>
-                <span className="text-emerald-600">Concluídos</span>
+                <span className="text-emerald-600">No Prazo</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 bg-amber-400 rounded-xs"></span>
+                <span className="text-amber-600">Com Atraso</span>
               </div>
             </div>
           </div>
@@ -307,13 +279,16 @@ export default function PerformanceDashboard({ plans, onUpdatePlan }: Performanc
                               Previstos: <span className="font-bold text-slate-205">{data["Previstos"]}</span>
                             </p>
                             <p className="font-medium text-[11px]">
-                              Realizados: <span className="font-bold text-emerald-400">{data["Realizados"]}</span>
+                              Concluídos no prazo: <span className="font-bold text-emerald-400">{data["Concluídos no Prazo"]}</span>
+                            </p>
+                            <p className="font-medium text-[11px]">
+                              Concluídos com atraso: <span className="font-bold text-amber-400">{data["Concluídos com Atraso"]}</span>
                             </p>
                             <p className="font-medium text-[11px]">
                               Pendente: <span className="font-bold text-indigo-300">{data["Pendentes"]}</span>
                             </p>
                             <p className="text-[10px] font-black text-teal-300 pt-1">
-                              Eficácia: {data.porcentagem}%
+                              Eficácia (no prazo): {data.porcentagem}%
                             </p>
                           </div>
                         );
@@ -340,19 +315,37 @@ export default function PerformanceDashboard({ plans, onUpdatePlan }: Performanc
                     })}
                   </Bar>
 
-                  {/* Barra - Realizados/Concluídos (Verde Esmeralda) */}
-                  <Bar 
-                    dataKey="Realizados" 
-                    fill="#10b981" 
-                    radius={[6, 6, 0, 0]} 
+                  {/* Barra - Concluídos no Prazo (Verde Esmeralda) */}
+                  <Bar
+                    dataKey="Concluídos no Prazo"
+                    fill="#10b981"
+                    radius={[6, 6, 0, 0]}
                     maxBarSize={38}
                   >
                     {monthlyData.map((entry, index) => {
                       const isSelected = selectedMonthIndex === index;
                       return (
-                        <Cell 
-                          key={`cell-real-${index}`} 
-                          fill={isSelected ? "#047857" : "#10b981"} 
+                        <Cell
+                          key={`cell-real-${index}`}
+                          fill={isSelected ? "#047857" : "#10b981"}
+                        />
+                      );
+                    })}
+                  </Bar>
+
+                  {/* Barra - Concluídos com Atraso (Amarelo) */}
+                  <Bar
+                    dataKey="Concluídos com Atraso"
+                    fill="#f59e0b"
+                    radius={[6, 6, 0, 0]}
+                    maxBarSize={38}
+                  >
+                    {monthlyData.map((entry, index) => {
+                      const isSelected = selectedMonthIndex === index;
+                      return (
+                        <Cell
+                          key={`cell-atraso-${index}`}
+                          fill={isSelected ? "#b45309" : "#f59e0b"}
                         />
                       );
                     })}
@@ -398,7 +391,7 @@ export default function PerformanceDashboard({ plans, onUpdatePlan }: Performanc
 
                     <div className="flex items-center gap-3 text-right">
                       <span className={`text-[10px] font-mono font-bold ${isSelected ? 'text-white/90' : 'text-slate-500'}`}>
-                        {m["Realizados"]}/{m["Previstos"]}
+                        {m["Concluídos no Prazo"]}/{m["Previstos"]}
                       </span>
                       <span className={`text-[10px] p-1 font-extrabold rounded-md min-w-[36px] text-center ${
                         isSelected 
@@ -552,24 +545,35 @@ export default function PerformanceDashboard({ plans, onUpdatePlan }: Performanc
                             Prioridade {plan.priority}
                           </span>
                           
-                          {/* Tag Indicativa de Mês de Vinculação */}
+                          {/* Tag Indicativa do Mês PREVISTO ORIGINAL (baseline imutável) */}
                           <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md ${
-                            plan.detectedMonthIdx !== null 
-                              ? "bg-indigo-50 text-indigo-700 border border-indigo-100" 
+                            plan.detectedMonthIdx !== null
+                              ? "bg-indigo-50 text-indigo-700 border border-indigo-100"
                               : "bg-amber-50 text-amber-700 border border-amber-100"
-                          }`}>
-                            Meta: {parsedMonthLabel}
+                          }`} title="Mês previsto originalmente — não muda mesmo se o prazo atual for alterado depois">
+                            Meta Original: {parsedMonthLabel}
                           </span>
+
+                          {/* Tag de classificação da conclusão */}
+                          {isCompleted && plan.completionType && (
+                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md border ${
+                              plan.completionType === "no_prazo"
+                                ? "bg-emerald-50 text-emerald-700 border-emerald-100"
+                                : "bg-amber-50 text-amber-700 border-amber-100"
+                            }`}>
+                              {plan.completionType === "no_prazo" ? "Concluído no Prazo" : "Concluído com Atraso"}
+                            </span>
+                          )}
                         </div>
-                        
+
                         <h5 className={`font-extrabold text-xs text-slate-850 tracking-tight leading-snug ${isCompleted ? 'line-through text-slate-400' : ''}`}>
                           {plan.what}
                         </h5>
                       </div>
 
                       {/* Botão de Checkbox Completo */}
-                      <button 
-                        onClick={() => onUpdatePlan({ ...plan, completed: !isCompleted })}
+                      <button
+                        onClick={() => requestCompletionToggle(plan)}
                         className="p-1 cursor-pointer shrink-0"
                         title={isCompleted ? "Marcar como pendente" : "Marcar como concluído"}
                       >
@@ -596,18 +600,22 @@ export default function PerformanceDashboard({ plans, onUpdatePlan }: Performanc
                         <strong className="text-slate-400">Procedimento:</strong> {plan.how}
                       </div>
                       <div>
-                        <strong className="text-slate-400">Prazo original:</strong> {plan.when}
+                        <strong className="text-slate-400">Prazo atual:</strong> {plan.when}
                       </div>
                     </div>
                   </div>
 
-                  {/* Atribuição rápida de Mês */}
+                  {/* Atribuição rápida de Mês — altera apenas o prazo ATUAL (texto livre).
+                      O mês previsto original, usado no indicador, já foi congelado e não muda aqui. */}
                   <div className="mt-3.5 pt-2.5 border-t border-slate-100 flex items-center justify-between gap-2">
-                    <span className="text-[9.5px] font-bold text-slate-400 uppercase tracking-wide">
-                      Mudar ou Atribuir Mês:
+                    <span className="text-[9.5px] font-bold text-slate-400 uppercase tracking-wide" title="Isso não altera o mês previsto original usado no Painel de Desempenho">
+                      Atualizar Prazo Atual:
                     </span>
                     <select
-                      value={plan.detectedMonthIdx !== null ? plan.detectedMonthIdx : ""}
+                      value={(() => {
+                        const currentIdx = parseMonthFromWhen(plan.when);
+                        return currentIdx !== null ? currentIdx : "";
+                      })()}
                       onChange={(e) => {
                         const val = e.target.value;
                         let updatedText = "";
@@ -620,7 +628,7 @@ export default function PerformanceDashboard({ plans, onUpdatePlan }: Performanc
                           updatedText = `${monthName} de 2026`;
                           onUpdatePlan({ ...plan, when: updatedText });
                         }
-                        setSuccessToast(`Prazo da ação "${plan.what}" alterado para "${updatedText}" e sincronizado no banco de dados!`);
+                        setSuccessToast(`Prazo atual da ação "${plan.what}" alterado para "${updatedText}". O mês previsto original (${parsedMonthLabel}) foi mantido no indicador.`);
                       }}
                       className="text-[10px] p-1.5 border border-slate-200 rounded-lg bg-white font-bold text-slate-700 outline-hidden hover:border-indigo-300 cursor-pointer"
                     >
@@ -636,6 +644,13 @@ export default function PerformanceDashboard({ plans, onUpdatePlan }: Performanc
           )}
         </div>
       </div>
+
+      <CompletionConfirmModal
+        plan={pendingCompletionPlan}
+        onCancel={cancelCompletionToggle}
+        onConfirmOnTime={confirmCompletionOnTime}
+        onConfirmLate={confirmCompletionLate}
+      />
 
       {/* Toast flutuante de Sucesso */}
       {successToast && (

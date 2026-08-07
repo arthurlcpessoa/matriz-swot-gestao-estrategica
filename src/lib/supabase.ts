@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { OmiActionPlan } from "../components/OmiActionPlansTab";
 import { SwotItem, RiskItem, OpportunityItem, ActionPlanItem } from "../types";
+import { parseMonthFromWhen } from "./planMonth";
 
 // As chaves fornecidas pelo usuário para o Supabase ou salvas no localStorage
 export function getSavedSupabaseConfig() {
@@ -273,7 +274,10 @@ export async function getActionPlans(): Promise<ActionPlanItem[] | null> {
       howMuch: a.how_much,
       priority: a.priority,
       suggestedKrs: Array.isArray(a.suggested_krs) ? a.suggested_krs : [],
-      completed: a.completed ?? false
+      completed: a.completed ?? false,
+      originalDeadlineMonth: a.original_deadline_month ?? null,
+      completionType: a.completion_type ?? null,
+      actualCompletionMonth: a.actual_completion_month ?? null
     })) as ActionPlanItem[];
   } catch (err) {
     console.error("Falha no getActionPlans:", err);
@@ -299,22 +303,32 @@ export async function saveActionPlans(items: ActionPlanItem[]): Promise<{ succes
       }
     }
 
-    const formatted = items.map(a => ({
-      id: a.id,
-      type: a.type,
-      related_id: a.relatedId,
-      related_description: a.relatedDescription,
-      what: a.what,
-      why: a.why,
-      where: a.where,
-      when: a.when,
-      who: a.who,
-      how: a.how,
-      how_much: a.howMuch,
-      priority: a.priority,
-      suggested_krs: a.suggestedKrs || [],
-      completed: a.completed ?? false
-    }));
+    const formatted = items.map(a => {
+      // Congela o prazo original na primeira gravação do plano. Uma vez definido,
+      // este valor nunca é recalculado aqui (e o banco também trava isso via trigger),
+      // então alterações posteriores de "when" não afetam mais o Painel de Desempenho.
+      const originalDeadlineMonth = a.originalDeadlineMonth ?? parseMonthFromWhen(a.when);
+
+      return {
+        id: a.id,
+        type: a.type,
+        related_id: a.relatedId,
+        related_description: a.relatedDescription,
+        what: a.what,
+        why: a.why,
+        where: a.where,
+        when: a.when,
+        who: a.who,
+        how: a.how,
+        how_much: a.howMuch,
+        priority: a.priority,
+        suggested_krs: a.suggestedKrs || [],
+        completed: a.completed ?? false,
+        original_deadline_month: originalDeadlineMonth,
+        completion_type: a.completionType ?? null,
+        actual_completion_month: a.actualCompletionMonth ?? null
+      };
+    });
 
     const { error } = await supabase.from("action_plans").upsert(formatted);
     if (error) {
