@@ -20,30 +20,34 @@ import {
   RefreshCw
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { SwotItem, RiskItem, OpportunityItem, ActionPlanItem, SwotCategory } from "./types";
-import { 
+import { SwotItem, RiskItem, OpportunityItem, ActionPlanItem, SwotCategory, Profile } from "./types";
+import {
   SWOT_TEMPLATES,
   ACLF_DEFAULT_RISKS,
   ACLF_DEFAULT_OPPORTUNITIES,
   ACLF_DEFAULT_ACTION_PLANS
 } from "./data/templates";
 import { exportToExcel, exportToCSV } from "./utils/exporter";
-import { 
-  getSwotItems, 
-  saveSwotItems, 
+import {
+  getSwotItems,
+  saveSwotItems,
   deleteSwotItemFromDb,
-  getRisks, 
-  saveRisks, 
+  getRisks,
+  saveRisks,
   deleteRiskFromDb,
-  getOpportunities, 
-  saveOpportunities, 
+  getOpportunities,
+  saveOpportunities,
   deleteOpportunityFromDb,
-  getActionPlans, 
+  getActionPlans,
   saveActionPlans,
   deleteActionPlanFromDb,
   deleteActionPlansByRelatedId,
   getSavedSupabaseConfig,
-  updateSupabaseClient
+  updateSupabaseClient,
+  signInWithPassword,
+  signOutUser,
+  getCurrentProfile,
+  onAuthStateChange
 } from "./lib/supabase";
 
 import SwotUpload from "./components/SwotUpload";
@@ -53,6 +57,7 @@ import AnalyticalDashboard from "./components/AnalyticalDashboard";
 import ActionPlans from "./components/ActionPlans";
 import PerformanceDashboard from "./components/PerformanceDashboard";
 import OmiDashboard from "./components/OmiDashboard";
+import UserManagement from "./components/UserManagement";
 
 /**
  * Garante uma relação de cobertura estritamente 1-para-1 correspondente: 
@@ -154,14 +159,43 @@ export function filterPlansToOneToOne(
   return finalPlans;
 }
 
- type UserRole = "admin" | "viewer" | null;
-
 export default function App() {
 
-  const [userRole, setUserRole] = useState<UserRole>(null);
-  const [isChoosingAdmin, setIsChoosingAdmin] = useState(false);
+  // --- Autenticação (Supabase Auth + tabela "profiles") ---
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [showUserManagement, setShowUserManagement] = useState(false);
 
-  const isAdmin = userRole === "admin";
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+
+  const isAdmin = !!profile && profile.role === "admin" && profile.active;
+  // Edição fica bloqueada para quem não é admin ativo (substitui o antigo controle manual).
+  const isEditingLocked = !isAdmin;
+
+  // Restaura a sessão do Supabase Auth ao carregar a página e reage a
+  // login/logout feitos em qualquer lugar (ex.: aba duplicada).
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadProfile() {
+      const current = await getCurrentProfile();
+      if (isMounted) {
+        setProfile(current);
+        setIsAuthLoading(false);
+      }
+    }
+
+    loadProfile();
+    const unsubscribe = onAuthStateChange(loadProfile);
+
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
+  }, []);
 
   const [activeTab, setActiveTab] = useState<
   "swot" | "analysis" | "plans" | "dashboard" | "omi" | "report"
@@ -170,13 +204,6 @@ export default function App() {
 const [swotViewMode, setSwotViewMode] = useState<
   "quadrants" | "table"
 >("quadrants");
-
-
-// Controle antigo de bloqueio de edição
-const [isEditingLocked, setIsEditingLocked] = useState<boolean>(true);
-const [showPasswordModal, setShowPasswordModal] = useState<boolean>(false);
-const [passwordInput, setPasswordInput] = useState<string>("");
-const [passwordError, setPasswordError] = useState<string | null>(null);
 
 const [currentTemplateName, setCurrentTemplateName] = useState<string>(() => {
   const saved = localStorage.getItem("swot_template_name");
@@ -806,56 +833,51 @@ const [currentTemplateName, setCurrentTemplateName] = useState<string>(() => {
   };
 
 
-  const handleUnlockEditing = async (e: React.FormEvent) => {
-  e.preventDefault();
-  setPasswordError(null);
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError(null);
+    setIsLoggingIn(true);
 
+    try {
+      const result = await signInWithPassword(loginEmail.trim(), loginPassword);
+      if (!result.success) {
+        setLoginError(result.error || "E-mail ou senha inválidos.");
+        setIsLoggingIn(false);
+        return;
+      }
 
-  try {
-    const response = await fetch("/api/auth/admin", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        password: passwordInput
-      })
-    });
+      const current = await getCurrentProfile();
+      if (!current) {
+        setLoginError("Login válido, mas não foi possível carregar seu perfil de acesso.");
+        await signOutUser();
+        setIsLoggingIn(false);
+        return;
+      }
+      if (!current.active) {
+        setLoginError("Este acesso foi desativado. Fale com um administrador.");
+        await signOutUser();
+        setIsLoggingIn(false);
+        return;
+      }
 
-    const data = await response.json();
-
-    if (!response.ok || !data.success) {
-      setPasswordError(
-        data.error || "Senha incorreta! Por favor, tente novamente."
-      );
-      return;
+      setProfile(current);
+      setLoginPassword("");
+      setLoginError(null);
+      setIsLoggingIn(false);
+    } catch (error) {
+      console.error("Erro ao autenticar usuário:", error);
+      setLoginError("Não foi possível autenticar. Verifique sua conexão.");
+      setIsLoggingIn(false);
     }
+  };
 
-    setUserRole("admin");
-setIsEditingLocked(false);
-setShowPasswordModal(false);
-setIsChoosingAdmin(false);
-setPasswordInput("");
-setPasswordError(null);
-  } catch (error) {
-    console.error("Erro ao autenticar administrador:", error);
-    setPasswordError(
-      "Não foi possível validar a senha. Verifique se o servidor está rodando."
-    );
-  }
-}; 
-
-const handleEnterAsViewer = () => {
-  setUserRole("viewer");
-  setIsEditingLocked(true);
-  setIsChoosingAdmin(false);
-  setShowPasswordModal(false);
-  setPasswordInput("");
-  setPasswordError(null);
-};
-
-  const handleLockEditing = () => {
-    setIsEditingLocked(true);
+  const handleLogout = async () => {
+    await signOutUser();
+    setProfile(null);
+    setLoginEmail("");
+    setLoginPassword("");
+    setLoginError(null);
+    setShowUserManagement(false);
   };
 
   // --- Handlers de Modificação para Riscos, Oportunidades e Planos de Ação ---
@@ -1226,7 +1248,18 @@ const handleEnterAsViewer = () => {
     }
   };
 
-  if (userRole === null) {
+  if (isAuthLoading) {
+    return (
+      <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
+        <div className="flex flex-col items-center gap-3">
+          <img src={aclfLogoBase64} alt="ACLF" className="h-14 object-contain opacity-80" />
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Carregando sessão...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!profile) {
   return (
     <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
       <div className="w-full max-w-md bg-white border border-slate-200 rounded-3xl shadow-xl p-8 space-y-6">
@@ -1243,94 +1276,61 @@ const handleEnterAsViewer = () => {
             </h1>
 
             <p className="text-sm text-slate-500 mt-1">
-              Escolha o perfil de acesso para continuar.
+              Entre com seu e-mail e senha para continuar.
             </p>
           </div>
         </div>
 
-        {!isChoosingAdmin ? (
-          <div className="space-y-3">
-            <button
-              type="button"
-              onClick={handleEnterAsViewer}
-              className="w-full p-4 rounded-2xl border border-slate-200 bg-white hover:bg-slate-50 text-left transition-all"
-            >
-              <span className="block font-extrabold text-slate-800">
-                Entrar como Visualizador
-              </span>
-
-              <span className="block text-xs text-slate-500 mt-1">
-                Consulta e atualização dos campos permitidos.
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setIsChoosingAdmin(true);
-                setPasswordInput("");
-                setPasswordError(null);
+        <form onSubmit={handleLogin} className="space-y-4">
+          <div>
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1.5">
+              E-mail
+            </label>
+            <input
+              type="email"
+              value={loginEmail}
+              onChange={(e) => {
+                setLoginEmail(e.target.value);
+                setLoginError(null);
               }}
-              className="w-full p-4 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white text-left transition-all"
-            >
-              <span className="block font-extrabold">
-                Entrar como Administrador
-              </span>
-
-              <span className="block text-xs text-slate-300 mt-1">
-                Acesso completo mediante senha.
-              </span>
-            </button>
+              placeholder="seuemail@aclf.com.br"
+              autoFocus
+              required
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-slate-500"
+            />
           </div>
-        ) : (
-          <form onSubmit={handleUnlockEditing} className="space-y-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1.5">
-                Senha de administrador
-              </label>
 
-              <input
-                type="password"
-                value={passwordInput}
-                onChange={(e) => {
-                  setPasswordInput(e.target.value);
-                  setPasswordError(null);
-                }}
-                placeholder="Digite a senha..."
-                autoFocus
-                required
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-slate-500"
-              />
-            </div>
+          <div>
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1.5">
+              Senha
+            </label>
+            <input
+              type="password"
+              value={loginPassword}
+              onChange={(e) => {
+                setLoginPassword(e.target.value);
+                setLoginError(null);
+              }}
+              placeholder="Digite a senha..."
+              required
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-slate-500"
+            />
+          </div>
 
-            {passwordError && (
-              <p className="text-xs font-bold text-rose-600">
-                {passwordError}
-              </p>
-            )}
+          {loginError && (
+            <p className="text-xs font-bold text-rose-600">
+              {loginError}
+            </p>
+          )}
 
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsChoosingAdmin(false);
-                  setPasswordInput("");
-                  setPasswordError(null);
-                }}
-                className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-sm"
-              >
-                Voltar
-              </button>
-
-              <button
-                type="submit"
-                className="flex-1 px-4 py-2.5 rounded-xl bg-slate-900 text-white font-bold text-sm"
-              >
-                Entrar
-              </button>
-            </div>
-          </form>
-        )}
+          <button
+            type="submit"
+            disabled={isLoggingIn}
+            className="w-full px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white font-bold text-sm cursor-pointer transition-all"
+          >
+            {isLoggingIn ? "Entrando..." : "Entrar"}
+          </button>
+        </form>
       </div>
     </div>
   );
@@ -1342,17 +1342,17 @@ const handleEnterAsViewer = () => {
       
       {/* Top Professional Header Bar */}
       <header id="enterprise-header" className="bg-white border-b border-slate-200/90 py-5 px-6 sticky top-0 z-40 shadow-2xs print:relative print:border-none print:shadow-none">
-        <div className={`mx-auto flex flex-col md:flex-row justify-between items-start md:items-center gap-4 ${activeTab === "omi" ? "max-w-[1600px] xl:max-w-[95%]" : "max-w-7xl"}`}>
-          <div className="flex items-center gap-3">
-            <img 
-              src={aclfLogoBase64} 
-              alt="ACLF Empreendimentos Logo" 
+        <div className={`mx-auto flex flex-col lg:flex-row lg:flex-wrap justify-between items-start lg:items-center gap-4 ${activeTab === "omi" ? "max-w-[1600px] xl:max-w-[95%]" : "max-w-7xl"}`}>
+          <div className="flex items-center gap-3 shrink-0">
+            <img
+              src={aclfLogoBase64}
+              alt="ACLF Empreendimentos Logo"
               className="h-8 w-auto object-contain rounded-lg"
               referrerPolicy="no-referrer"
             />
             <div>
               <h1 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight flex items-center gap-2 whitespace-nowrap">
-                Planejamento Estratégico Corporativo 
+                Planejamento Estratégico Corporativo
                 <span className="hidden sm:inline-block text-[10px] font-bold px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded-md border border-indigo-100">
                   v2.0 IA
                 </span>
@@ -1364,33 +1364,37 @@ const handleEnterAsViewer = () => {
           </div>
 
           {/* Core Controls Header (Generatos & Exporters) */}
-          <div className="flex flex-wrap items-center gap-3.5 print:hidden">
-          
-          <div className="flex items-center gap-2 text-[11px] bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200 font-bold text-slate-700">
+          <div className="flex flex-wrap items-center gap-2.5 w-full lg:w-auto lg:justify-end lg:ml-auto print:hidden">
+
+          <div className="flex items-center gap-2 text-[11px] bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200 font-bold text-slate-700 min-w-0 max-w-full">
   <span
     className={
       isAdmin
-        ? "w-2 h-2 rounded-full bg-indigo-600"
-        : "w-2 h-2 rounded-full bg-slate-400"
+        ? "w-2 h-2 rounded-full bg-indigo-600 shrink-0"
+        : "w-2 h-2 rounded-full bg-slate-400 shrink-0"
     }
   />
-  <span>
-    Perfil: {isAdmin ? "Administrador" : "Visualizador"}
+  <span className="truncate max-w-[160px] sm:max-w-[240px]">
+    Perfil: {isAdmin ? "Administrador" : "Visualizador"}{profile?.email ? ` · ${profile.email}` : ""}
   </span>
 </div>
 
+{isAdmin && (
+  <button
+    type="button"
+    onClick={() => setShowUserManagement(true)}
+    className="text-[11px] px-3 py-1.5 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 font-bold hover:bg-indigo-100 transition-all cursor-pointer whitespace-nowrap"
+  >
+    Gerenciar Usuários
+  </button>
+)}
+
 <button
   type="button"
-  onClick={() => {
-    setUserRole(null);
-    setIsEditingLocked(true);
-    setIsChoosingAdmin(false);
-    setPasswordInput("");
-    setPasswordError(null);
-  }}
-  className="text-[11px] px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 font-bold hover:bg-slate-50 transition-all cursor-pointer"
+  onClick={handleLogout}
+  className="text-[11px] px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 font-bold hover:bg-slate-50 transition-all cursor-pointer whitespace-nowrap"
 >
-  Trocar perfil
+  Sair
 </button>
 
             {/* Status indicators */}
@@ -2329,66 +2333,12 @@ CREATE POLICY "Permitir tudo para anon" ON action_plans FOR ALL USING (true) WIT
         </div>
       )}
 
-      {/* PASSWORD PROTECTION MODAL */}
-      {showPasswordModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-          <div className="bg-white border border-slate-200/85 w-full max-w-sm rounded-2xl p-6 shadow-xl space-y-4 animate-in zoom-in-95 duration-200">
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 bg-amber-100 text-amber-700 rounded-xl">
-                <ShieldAlert className="w-5 h-5 text-amber-600" />
-              </div>
-              <div>
-                <h3 className="font-extrabold text-base text-slate-800">Habilitar Modo Edição</h3>
-                <p className="text-xs text-slate-500 font-normal mt-0.5">Informe a credencial corporativa para liberar alterações.</p>
-              </div>
-            </div>
-
-            <form onSubmit={handleUnlockEditing} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1.5">Senha de Acesso</label>
-                <input
-                  type="password"
-                  placeholder="Digite a senha..."
-                  value={passwordInput}
-                  onChange={(e) => {
-                    setPasswordInput(e.target.value);
-                    setPasswordError(null);
-                  }}
-                  autoFocus
-                  required
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-sm font-semibold placeholder:text-slate-400 focus:outline-none focus:ring-1.5 focus:ring-amber-500 text-slate-800 transition-all font-mono tracking-widest text-center"
-                />
-                
-                {passwordError && (
-                  <p className="text-rose-600 font-medium text-[11px] mt-1.5 flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500 inline-block"></span>
-                    {passwordError}
-                  </p>
-                )}
-              </div>
-
-              <div className="flex justify-end gap-2.5 pt-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowPasswordModal(false);
-                    setPasswordInput("");
-                    setPasswordError(null);
-                  }}
-                  className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold px-4 py-2.5 rounded-xl transition-all cursor-pointer leading-none"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="text-xs bg-amber-500 hover:bg-amber-600 text-white font-black px-5 py-2.5 rounded-xl transition-all shadow-md shadow-amber-550/10 cursor-pointer leading-none"
-                >
-                  Confirmar & Liberar
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+      {profile && (
+        <UserManagement
+          isOpen={showUserManagement}
+          onClose={() => setShowUserManagement(false)}
+          currentUserId={profile.id}
+        />
       )}
 
     </div>

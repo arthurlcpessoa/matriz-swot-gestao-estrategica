@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { OmiActionPlan } from "../components/OmiActionPlansTab";
-import { SwotItem, RiskItem, OpportunityItem, ActionPlanItem } from "../types";
+import { SwotItem, RiskItem, OpportunityItem, ActionPlanItem, Profile } from "../types";
 import { parseMonthFromWhen } from "./planMonth";
 
 // As chaves fornecidas pelo usuário para o Supabase ou salvas no localStorage
@@ -596,6 +596,156 @@ export async function saveOmiIndicatorResults(
       success: false,
       error
     };
+  }
+}
+
+// --- AUTENTICAÇÃO E PERFIS (Supabase Auth + tabela "profiles") ---
+// Substitui o antigo fluxo POST /api/auth/admin: login, sessão e papel
+// (admin/viewer) passam a depender só do Supabase, sem backend Node.
+
+export async function signInWithPassword(
+  email: string,
+  password: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
+      return { success: false, error: error.message };
+    }
+    return { success: true };
+  } catch (err: any) {
+    console.error("Falha no signInWithPassword:", err);
+    return { success: false, error: err?.message || "Erro inesperado ao autenticar." };
+  }
+}
+
+export async function signOutUser(): Promise<void> {
+  try {
+    await supabase.auth.signOut();
+  } catch (err) {
+    console.error("Falha no signOutUser:", err);
+  }
+}
+
+// Notifica o callback sempre que a sessão do Supabase Auth mudar (login,
+// logout, refresh de token). Retorna uma função para cancelar a inscrição.
+export function onAuthStateChange(callback: () => void): () => void {
+  const { data } = supabase.auth.onAuthStateChange(() => {
+    callback();
+  });
+  return () => data.subscription.unsubscribe();
+}
+
+function mapProfileRow(row: any): Profile {
+  return {
+    id: row.id,
+    email: row.email,
+    role: row.role === "admin" ? "admin" : "viewer",
+    active: row.active ?? true,
+    createdAt: row.created_at
+  };
+}
+
+// Perfil (papel/status) do usuário atualmente autenticado, ou null se
+// ninguém estiver logado ou o perfil ainda não existir na tabela.
+export async function getCurrentProfile(): Promise<Profile | null> {
+  try {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const user = sessionData.session?.user;
+    if (!user) return null;
+
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id, email, role, active, created_at")
+      .eq("id", user.id)
+      .single();
+
+    if (error || !data) return null;
+    return mapProfileRow(data);
+  } catch (err) {
+    console.error("Falha no getCurrentProfile:", err);
+    return null;
+  }
+}
+
+// Lista todos os perfis — usado pela tela de gestão de usuários (admin).
+export async function listProfiles(): Promise<Profile[]> {
+  try {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id, email, role, active, created_at")
+      .order("created_at", { ascending: true });
+
+    if (error || !data) return [];
+    return data.map(mapProfileRow);
+  } catch (err) {
+    console.error("Falha no listProfiles:", err);
+    return [];
+  }
+}
+
+export async function updateProfileRole(
+  id: string,
+  role: "admin" | "viewer"
+): Promise<{ success: boolean; error?: string }> {
+  const { error } = await supabase.from("profiles").update({ role }).eq("id", id);
+  if (error) return { success: false, error: error.message };
+  return { success: true };
+}
+
+export async function updateProfileActive(
+  id: string,
+  active: boolean
+): Promise<{ success: boolean; error?: string }> {
+  const { error } = await supabase.from("profiles").update({ active }).eq("id", id);
+  if (error) return { success: false, error: error.message };
+  return { success: true };
+}
+
+// Cria um novo usuário (e-mail/senha) e define seu papel. Usa um client
+// Supabase secundário e descartável (persistSession: false) só para o
+// signUp, exatamente para o cadastro não substituir a sessão do admin
+// que está logado no client principal ("supabase"). Não usa service_role
+// — funciona só com a chave anon, então continua rodando 100% no front-end.
+export async function createUserAsAdmin(
+  email: string,
+  password: string,
+  role: "admin" | "viewer"
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { url, key } = getSavedSupabaseConfig();
+    const tempClient = createClient(url, key, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        storageKey: `sb-temp-create-user-${Date.now()}`
+      }
+    });
+
+    const { data, error } = await tempClient.auth.signUp({ email, password });
+    if (error) {
+      return { success: false, error: error.message };
+    }
+    if (!data.user) {
+      return { success: false, error: "Não foi possível criar o usuário." };
+    }
+
+    if (role === "admin") {
+      // A trigger do banco já criou o perfil com role='viewer'; promovemos aqui,
+      // usando o client principal (sessão do admin) para respeitar a RLS.
+      const promote = await updateProfileRole(data.user.id, "admin");
+      if (!promote.success) {
+        return {
+          success: false,
+          error: `Usuário criado, mas falha ao definir papel de administrador: ${promote.error}`
+        };
+      }
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    console.error("Falha no createUserAsAdmin:", err);
+    return { success: false, error: err?.message || "Erro inesperado ao criar usuário." };
   }
 }
 

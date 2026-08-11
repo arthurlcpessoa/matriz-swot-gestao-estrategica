@@ -70,3 +70,12 @@ export interface StrategicAnalysisResponse {
   opportunities: OpportunityItem[];
   actionPlans: ActionPlanItem[];
 }
+
+// Perfil de acesso do usuário autenticado via Supabase Auth (tabela "profiles").
+export interface Profile {
+  id: string;
+  email: string | null;
+  role: 'admin' | 'viewer';
+  active: boolean;
+  createdAt?: string;
+}

@@ -574,41 +574,6 @@ app.get("/api/health", (req, res) => {
   });
 });
 
-// Endpoint de autenticação do administrador
-app.post("/api/auth/admin", (req: Request, res: Response) => {
-  const { password } = req.body;
-
-  if (typeof password !== "string" || password.trim() === "") {
-    return res.status(400).json({
-      success: false,
-      error: "Senha não informada."
-    });
-  }
-
-  const adminPassword = process.env.ADMIN_PASSWORD;
-
-  if (!adminPassword) {
-    console.error("ADMIN_PASSWORD não está configurada no arquivo .env.");
-
-    return res.status(500).json({
-      success: false,
-      error: "A senha de administrador não está configurada no servidor."
-    });
-  }
-
-  if (password !== adminPassword) {
-    return res.status(401).json({
-      success: false,
-      error: "Senha de administrador incorreta."
-    });
-  }
-
-  return res.status(200).json({
-    success: true,
-    role: "admin"
-  });
-});
-
 interface ReminderActionPlan {
   id: string;
   title?: string;
