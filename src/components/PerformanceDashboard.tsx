@@ -39,7 +39,7 @@ export default function PerformanceDashboard({ plans, onUpdatePlan }: Performanc
   const [selectedMonthIndex, setSelectedMonthIndex] = useState<number | null>(null);
   const [successToast, setSuccessToast] = useState<string | null>(null);
 
-  // Auto-esconder toast após 5.5s
+
   React.useEffect(() => {
     if (!successToast) return;
     const timer = setTimeout(() => {
@@ -605,10 +605,20 @@ export default function PerformanceDashboard({ plans, onUpdatePlan }: Performanc
                     </div>
                   </div>
 
-                  {/* Atribuição rápida de Mês — altera apenas o prazo ATUAL (texto livre).
-                      O mês previsto original, usado no indicador, já foi congelado e não muda aqui. */}
+                  {/* Atribuição rápida de Mês.
+                      Plano em aberto: reatribui de verdade a Meta Original (replanejamento),
+                      então move o plano de mês no gráfico/tabela/indicadores.
+                      Plano já concluído: a Meta Original fica travada para preservar o
+                      histórico de desempenho — o campo só atualiza o texto informativo "when". */}
                   <div className="mt-3.5 pt-2.5 border-t border-slate-100 flex items-center justify-between gap-2">
-                    <span className="text-[9.5px] font-bold text-slate-400 uppercase tracking-wide" title="Isso não altera o mês previsto original usado no Painel de Desempenho">
+                    <span
+                      className="text-[9.5px] font-bold text-slate-400 uppercase tracking-wide"
+                      title={
+                        isCompleted
+                          ? "Plano já concluído: isso altera só o texto do prazo, a Meta Original fica travada"
+                          : "Plano em aberto: isso também move o plano de mês no Painel de Desempenho"
+                      }
+                    >
                       Atualizar Prazo Atual:
                     </span>
                     <select
@@ -618,17 +628,22 @@ export default function PerformanceDashboard({ plans, onUpdatePlan }: Performanc
                       })()}
                       onChange={(e) => {
                         const val = e.target.value;
-                        let updatedText = "";
-                        if (val === "") {
-                          updatedText = "Imediato";
-                          onUpdatePlan({ ...plan, when: updatedText });
-                        } else {
-                          const monthIdx = parseInt(val, 10);
-                          const monthName = MONTHS_FULL[monthIdx];
-                          updatedText = `${monthName} de 2026`;
-                          onUpdatePlan({ ...plan, when: updatedText });
-                        }
-                        setSuccessToast(`Prazo atual da ação "${plan.what}" alterado para "${updatedText}". O mês previsto original (${parsedMonthLabel}) foi mantido no indicador.`);
+                        const monthIdx = val === "" ? null : parseInt(val, 10);
+                        const updatedText = monthIdx === null ? "Imediato" : `${MONTHS_FULL[monthIdx]} de 2026`;
+
+                        onUpdatePlan({
+                          ...plan,
+                          when: updatedText,
+                          // Só reatribui a Meta Original enquanto o plano ainda está aberto.
+                          // Uma vez concluído, o valor já gravado é preservado (também travado no banco).
+                          originalDeadlineMonth: isCompleted ? plan.originalDeadlineMonth : monthIdx
+                        });
+
+                        setSuccessToast(
+                          isCompleted
+                            ? `Prazo atual da ação "${plan.what}" alterado para "${updatedText}". Como a ação já foi concluída, a Meta Original (${parsedMonthLabel}) foi preservada.`
+                            : `Ação "${plan.what}" reagendada para "${updatedText}" — Previstos, gráfico e tabela já atualizados.`
+                        );
                       }}
                       className="text-[10px] p-1.5 border border-slate-200 rounded-lg bg-white font-bold text-slate-700 outline-hidden hover:border-indigo-300 cursor-pointer"
                     >
